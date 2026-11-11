@@ -87,6 +87,14 @@ def main():
             baseline.get(str(source.relative_to(SOURCE))),
             previous.get(str(destination)),
         }
+        # A newly created managed window inherits the verified primary interface.
+        # It has no installer record yet; trust only that recorded primary digest.
+        app = home / ".config/herdr-app"
+        if str(destination) not in previous and destination.is_relative_to(app / "screens"):
+            rel = destination.relative_to(app / "screens")
+            record = app / "screens" / rel.parts[0] / "repo-window.json"
+            if record.is_file() and json.loads(record.read_text()).get("origin") == str(app):
+                expected.add(previous.get(str(app.joinpath(*rel.parts[1:]))))
         if changed and old is not None and digest(old) not in expected:
             raise SystemExit(
                 "Edited outside maintained sources; reconcile first: "

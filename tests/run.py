@@ -12,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix="repo-tools-tests-") as directory:
     stage = Path(directory)
     for name in ("install.py", "desktop_build.py"):
         shutil.copy2(source / name, stage / name)
+    shutil.copy2(source / "herdr/helpers/window.py", stage / "window_helper.py")
     shutil.copytree(source / "bin", stage, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for path in (source / "tests").glob("test_*.py"):

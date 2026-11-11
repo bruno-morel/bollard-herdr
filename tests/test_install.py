@@ -153,6 +153,25 @@ class Installer(unittest.TestCase):
             self.run_install("--apply")
         self.assertEqual(path.read_text(), "# user edit\n")
 
+    def test_new_managed_window_accepts_only_verified_primary_copies(self):
+        mod = self.source / "herdr/mods/example"
+        mod.mkdir(parents=True)
+        (mod / "main.js").write_text("// old")
+        self.run_install("--apply")
+        app = self.home / ".config/herdr-app"
+        window = app / "screens/new"
+        (window / "mods/example").mkdir(parents=True)
+        target = window / "mods/example/main.js"
+        target.write_text("// private edit")
+        (window / "repo-window.json").write_text(json.dumps({"origin":str(app)}))
+        (mod / "main.js").write_text("// new")
+        with self.assertRaisesRegex(SystemExit, "reconcile"):
+            self.run_install("--apply")
+        self.assertEqual(target.read_text(), "// private edit")
+        target.write_text("// old")
+        self.run_install("--apply")
+        self.assertEqual(target.read_text(), "// new")
+
     def test_known_installed_version_can_update(self):
         self.run_install("--apply")
         (self.source / "bin/repo-streams.py").write_text("value = 2\n")

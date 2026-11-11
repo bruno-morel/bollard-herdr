@@ -45,7 +45,11 @@ def prepare(source,lane,context=None):
  origin=Path((load(source/'repo-window.json',{}) or {}).get('origin',str(source))).resolve()
  key=hashlib.sha256(json.dumps([context.get('on'),context['cwd'],context.get('role')]).encode()).hexdigest()[:12]
  slug=re.sub('[^a-z0-9-]+','-',(context.get('repo','stream')+'-'+context['stream']).lower()).strip('-')[:48]
- destination=origin/'screens'/(slug+'-'+key)
+ legacy=origin/'screens'/(slug+'-'+key)
+ # macOS Unix sockets cannot use long profile paths. Keep existing short profiles.
+ destination=legacy if legacy.exists() and len(os.fsencode(str(legacy/'herdr-app.sock')))<104 else origin/'screens'/('w-'+key)
+ if len(os.fsencode(str(destination/'herdr-app.sock')))>=104:
+  raise RuntimeError('Herdr profile path is too long for its control socket; move the app home to a shorter path. No window was launched.')
  if destination==source:raise RuntimeError('This stream already has its own window. Switch to the other Herdr window to open a different stream.')
  destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
  with (destination.parent/(key+'.lock')).open('a') as lock:
@@ -100,12 +104,30 @@ def focus_context(executable,env,context):
 
 def open_window(source,lane,context=None):
  destination,context=prepare(source,lane,context)
+ with (destination/'open.lock').open('a') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  return launch_window(destination,context)
+
+def launch_window(destination,context):
  executable=shutil.which('herdr-app')
  if not executable:raise RuntimeError('The Herdr desktop launcher is unavailable on this computer.')
  env=dict(os.environ,HERDR_APP_HOME=str(destination))
+ # Reuse an existing display. An unacknowledged live launch must not be replayed.
+ try:
+  current=sp.run([executable,'status'],env=env,capture_output=True,text=True,timeout=2)
+  if current.returncode==0:
+   focus_context(executable,env,context)
+   return {'opened':True,'home':str(destination),'stream':context['stream'],'message':'Reused the existing stream window.'}
+ except sp.TimeoutExpired:pass
+ previous=load(destination/'launch-process.json',{})
+ if previous.get('pid'):
+  try:os.kill(previous['pid'],0)
+  except ProcessLookupError:pass
+  else:raise RuntimeError('This window is already opening or is unresponsive. Inspect it before retrying; no duplicate was launched.')
  with (destination/'launch.log').open('w') as log:
   os.chmod(log.name,0o600)
   proc=sp.Popen([executable],env=env,stdin=sp.DEVNULL,stdout=log,stderr=log,start_new_session=True)
+ save(destination/'launch-process.json',{'pid':proc.pid})
  deadline=time.monotonic()+18
  while time.monotonic()<deadline:
   try:

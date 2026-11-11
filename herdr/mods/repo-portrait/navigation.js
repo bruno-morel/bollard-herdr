@@ -171,6 +171,12 @@ export async function followOpens() {
         const result = await hc(['get', qualify(p.on, state.lead), '--json']);
         if (result.code) continue;
         const row = JSON.parse(result.stdout);
+        // Opening a window can succeed even when its acknowledgement fails.
+        // Consume before this side effect; never replay it from the polling timer.
+        const remaining = {...(shared(PENDING) || {})};
+        delete remaining[id];
+        setShared(PENDING, remaining);
+        remove = true;
         if (p.newWindow) await showInWindow(row, p.on, p.lane, p);
         else showConversation(row, p.on, p.lane, p);
         notify({
