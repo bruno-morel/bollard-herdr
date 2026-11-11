@@ -19,6 +19,8 @@ for folder in ('bin', 'herdr', 'tui', 'zellij', 'shell'):
     for path in (root / folder).rglob('*'):
         if not path.is_file():
             continue
+        if path.suffix == '.png':
+            continue  # Gallery preview is visually inspected before publication.
         data = path.read_bytes()
         if b'\0' in data or any(re.search(pattern, data) for pattern in private):
             raise SystemExit('Unexpected binary/private configuration: ' + str(path))

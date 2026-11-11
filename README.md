@@ -26,7 +26,7 @@ counters, stream pins and machine connections stay outside this repository.
 
 ## Prerequisites
 
-Install Git, Python 3.10+ (3.9 is exercised locally), zsh, SSH, Herdr desktop
+Install Git, Python 3.9+, zsh, SSH, Herdr desktop
 (`herdr-app`), Herdr terminal (`herdr`), and herdr-core (`hc`). Install and sign
 in to the agents you use: Codex, Claude Code and/or Cursor CLI. Glow provides
 terminal Markdown rendering. Docker with Compose is needed for Work stacks;
@@ -36,6 +36,24 @@ Use the upstream installation instructions at https://herdr.dev/.
 No vendor binaries, generated Herdr SDK declarations, or login credentials are
 bundled. Herdr mods use native GPUI APIs and may need updates as Herdr evolves.
 The original sidebar components were adapted from Herdr desktop 0.1.13.
+
+## Quick install choices
+
+After cloning, choose one:
+
+```sh
+./install.sh desktop --apply  # shared workflows + desktop UI
+./install.sh tui --apply      # shared workflows + terminal/phone UI
+./install.sh all --apply      # both interfaces on this machine
+```
+
+Omit `--apply` for a preview. `laptop` remains an alias for both interfaces;
+`jumpbox` remains the remote/TUI profile. No agent is started by installation.
+Shared CLI support is installed with either interface. The desktop assets live
+under `herdr/`; TUI presentation modules/config live under `bin/repo_tui*` and
+`tui/`. They share the backend, not separate copies of conversations or rules.
+No shell profile, login, remote connection, or private stream selection is
+silently configured. See `shell/herdr.zsh` for the optional terminal default.
 
 ## Install
 
@@ -109,6 +127,7 @@ Edit sources here, not deployed copies. `install.py` installs atomically and
 records hashes outside the repository to detect drift on the next update.
 
 ```sh
+brew install glow  # real Markdown rendering tests use Glow
 python3 tests/run.py
 python3 tests/check_sources.py
 python3 install.py laptop --verify

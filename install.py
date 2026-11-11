@@ -36,8 +36,9 @@ def targets(profile, home):
             yield source, home / ".local/bin" / source.relative_to(SOURCE / "bin")
     for source in sorted((SOURCE / "zellij/layouts").glob("*.kdl")):
         yield source, home / ".config/zellij/layouts" / source.name
-    yield SOURCE / "tui/studio-work-v2.toml", home / ".config/herdr/studio-work-v2.toml"
-    if profile != "laptop":
+    if profile != "desktop":
+        yield SOURCE / "tui/studio-work-v2.toml", home / ".config/herdr/studio-work-v2.toml"
+    if profile not in ("laptop", "desktop", "all"):
         return
     app = home / ".config/herdr-app"
     for base in [app, *sorted(p for p in (app / "screens").glob("*") if p.is_dir() and not p.is_symlink())]:
@@ -54,7 +55,7 @@ def targets(profile, home):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("profile", choices=["laptop", "jumpbox"])
+    parser.add_argument("profile", choices=["desktop", "tui", "all", "laptop", "jumpbox"])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--verify", action="store_true")

@@ -6,7 +6,7 @@ import subprocess as sp
 import sys
 
 p = argparse.ArgumentParser(description=__doc__)
-p.add_argument("profile", choices=("laptop", "jumpbox"))
+p.add_argument("profile", choices=("desktop", "tui", "all", "laptop", "jumpbox"))
 a = p.parse_args()
 root = Path(__file__).resolve().parent
 if sp.check_output(["git", "status", "--porcelain"], cwd=root).strip():

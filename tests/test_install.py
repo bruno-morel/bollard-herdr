@@ -46,6 +46,18 @@ class Installer(unittest.TestCase):
         ):
             I.main()
 
+    def test_desktop_and_tui_have_separate_interface_targets(self):
+        mod = self.source / "herdr/mods/example"
+        mod.mkdir(parents=True)
+        (mod / "main.js").write_text("// source")
+        with patch.object(I, "SOURCE", self.source):
+            desktop = [str(dst) for _, dst in I.targets("desktop", self.home)]
+            tui = [str(dst) for _, dst in I.targets("tui", self.home)]
+        self.assertTrue(any("herdr-app/mods" in x for x in desktop))
+        self.assertFalse(any("studio-work-v2.toml" in x for x in desktop))
+        self.assertTrue(any("studio-work-v2.toml" in x for x in tui))
+        self.assertFalse(any("herdr-app/mods" in x for x in tui))
+
     def test_screen_lock_files_are_not_installation_targets(self):
         screens = self.home / ".config/herdr-app/screens"
         screens.mkdir(parents=True)
@@ -53,7 +65,8 @@ class Installer(unittest.TestCase):
         mod = self.source / "herdr/mods/example"
         mod.mkdir(parents=True)
         (mod / "main.js").write_text("// source")
-        targets = list(I.targets("laptop", self.home))
+        with patch.object(I, "SOURCE", self.source):
+            targets = list(I.targets("laptop", self.home))
         self.assertFalse(any("example.lock" in str(dst) for _, dst in targets))
 
     def test_existing_layout_pins_are_preserved(self):

@@ -10,5 +10,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - run: brew install glow
       - run: python3 tests/check_sources.py
       - run: python3 tests/run.py
