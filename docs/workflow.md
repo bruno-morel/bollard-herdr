@@ -51,7 +51,7 @@ pane's context. Claude is reserved for review, not every passing thought.
 ```sh
 work complete my-feature --init    # create the risk/coverage form once
 # Fill docs/handoffs/my-feature/validation-plan.json before running checks.
-work tests my-feature             # run the configured project checks
+work tests run my-feature         # run the configured project checks
 work complete my-feature --status # inspect evidence; no tests or Claude calls
 work complete my-feature          # record completion, or explain what's missing
 ```

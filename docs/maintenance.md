@@ -1,20 +1,34 @@
 # Cleanup audit
 
-Status: **in progress**. This is a work list, not a certificate.
+**In progress.** Green tests are evidence, not a graduation ceremony.
 
-| Requirement | Evidence / next check |
-| --- | --- |
-| No dead workflow paths | Removed unused `work` slot/state functions; removed unreachable Studio new/close/help handlers, an unused session checker and a no-op setter. Open initializes docs once; prompt display/copy share path selection. Work now has one help source, including the child-led first test run. Continue auditing remaining dispatch and Python call sites. |
-| Minimal repetition | Shared desktop sources now generate 34 self-contained helpers; installer/CI reject drift. Test/review command validation now shares repo_checks.py. Picker/panel remote commands now share one transport. TUI helper presets now use the controller definitions. Continue auditing other backend duplication. |
-| Clear architecture | UI/controller/storage boundaries documented; picker transport and terminal UI are separate importable modules; the plain-text workflow menu is separate from its controller, with unreachable open branches removed. TUI display rows now live in a pure presentation module; loading/error states cannot masquerade as clean Git or empty Docker. Large flow and panel modules still need responsibility review. |
-| Robust tests | Isolated HOME/Git harness; launcher boundaries, installer rollback/cache/preview added. Added real-Git file browsing, routing isolation and stream split/removal tests. Added completion evidence/receipt tests and review allowance boundaries. Worker tests cover preflight failures, source drift, model failure, bounded Sonnet, reruns and process limits without model calls. Helper tests now cover ownership, duplicate launches, dirty parent checkouts and read-only agent arguments. Remaining backend paths still need auditing. |
-| Short, useful docs | README now links setup/workflow/development guides with diagrams and pasteable examples. Verify remaining recipes/help text against behavior. |
-| Preserve live workflows | No sessions restarted; deploy only after relevant checks and inspect both hosts. |
+| Area | Done | Still to inspect |
+| --- | --- | --- |
+| Dead code | Removed obsolete shell handlers, duplicate setup and unused imports. | Remaining Python call sites and shell paths. |
+| Repetition | Shared desktop helpers, check validation, remote transport, helper presets and CLI help. | Other backend command/state duplication. |
+| Architecture | Separate picker, transport, terminal controls, menu and display rows. | Workflow orchestration and remaining panel responsibilities. |
+| Tests | Isolated HOME/Git; installer rollback; stream identity; checkpoint retries; completion evidence; bounded review; helper ownership; shell aliases. | Remaining backend failure paths and interactive UI behavior. |
+| Docs | Short setup/workflow guides, diagrams and commands. Fixed the test-run example. | Gallery recipe and remaining command examples. |
+| Publication | Check tracked files and unignored candidates across the whole repo. | Final privacy, notices and package audit. |
 
-## Verified constraints
+## Constraints worth keeping
 
-- Herdr rejects sibling-module imports outside an individual mod directory.
-  Reproduced with a temporary copy of `repo-reader`; live windows were untouched.
-- Gallery packages need runnable mod folders. A shared-source build must keep
-  the published package usable, not merely make a source-tree linter happy.
-- Runtime state and Claude allowance counters must not be reset by cleanup.
+- Herdr rejects imports from sibling mod folders. Shared desktop sources generate
+  34 self-contained packaged helpers; installer and CI reject stale copies.
+- Missing status data must stay unknown. It is not a clean Git tree, an empty
+  Docker stack or zero quota usage.
+- Tests never launch paid agents. Review-worker tests replace the model boundary,
+  not the evidence checks.
+- Deployment preserves conversations, personal pins and Claude counters.
+
+## Before calling this done
+
+```sh
+python3 tests/check_sources.py
+python3 tests/run.py
+node --test tests/js/*.test.mjs
+./install.sh all --verify
+```
+
+Also check changed desktop mods natively, exercise their controls, and verify
+JumpBox. A file split alone does not prove better architecture.

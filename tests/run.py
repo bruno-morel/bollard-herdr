@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory(prefix="repo-tools-tests-") as directory:
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for path in (source / "tests").glob("test_*.py"):
         shutil.copy2(path, stage / path.name)
+    shutil.copy2(source / "tests/check_sources.py", stage / "check_sources.py")
     home = stage / "home"
     home.mkdir()
     env = dict(os.environ, HOME=str(home), PYTHONPATH=str(stage),
