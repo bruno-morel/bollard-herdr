@@ -11,7 +11,7 @@
 | Boundaries | Picker, transport, terminal input, menu, display rows and refresh queries live outside workflow controllers. |
 | Workflow tests | Stream identity, checkpoint retries, completion evidence, bounded review and helper ownership. |
 | Git tests | Real disposable repos: merge previews, stale tokens, ignored files and conflicts. |
-| Failure tests | Installer rollback, interrupted state writes, Docker lifecycle/ownership, TUI stream-switch races, refresh failures and cross-repository transfers, offline recovery and scratch validation. |
+| Failure tests | Installer rollback, interrupted state writes, Docker lifecycle/ownership, TUI stream-switch races, refresh failures and cross-repository transfers, offline recovery, scratch validation and provider quota failures. |
 | Docs | Short guides, diagrams, checked relative links and first-test setup. |
 
 Tests run with isolated HOME/Git settings. They never launch paid agents.
