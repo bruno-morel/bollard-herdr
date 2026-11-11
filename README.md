@@ -5,6 +5,11 @@
 Plan in **Studio**, build in **Work**, inspect the results without losing the
 conversation. Desktop, terminal and phone use the same Herdr sessions.
 
+![Bollard showing Codex and Claude stacked beside a Cursor example stream](herdr/preview.png)
+
+*Three example conversations in the public Bollard repository. Start with two
+stacked streams, then split or add windows to suit your screen.*
+
 ```mermaid
 flowchart LR
   S[Studio · plan] --> H[Git stream + handoff]
@@ -35,6 +40,22 @@ cd bollard-herdr
 
 In Herdr desktop, choose **studio-work-portrait**, then **Choose a stream**.
 In a terminal, run `repo-tui`. No agent starts just because you installed a UI.
+
+## What you can do
+
+| Feature | Learn the controls |
+| --- | --- |
+| Open existing conversations, worktrees or branches; create streams | [Stream picker](docs/user-guide.md#your-first-stream) |
+| Stack streams, split views and open separate windows | [Window layout](docs/user-guide.md#arrange-the-window) |
+| Keep chat and pending questions together | [Conversation & Questions](docs/user-guide.md#conversation-and-questions) |
+| Read/edit documents, browse files and inspect/merge Git changes | [Docs, Files & Git](docs/user-guide.md#docs-files-and-git) |
+| Start a stream's Docker stack and inspect logs | [Docker](docs/user-guide.md#docker) |
+| Run project tests, request independent review and check completion | [Tests & Review](docs/user-guide.md#tests-and-review) |
+| Checkpoint a conversation or delegate scoped work | [Actions & helpers](docs/user-guide.md#actions-and-helpers) |
+| Check agent activity, quotas, containers and Git status | [Information rail](docs/user-guide.md#information-rail) |
+| Continue the same conversations from a terminal or phone | [TUI guide](docs/user-guide.md#terminal-and-phone) |
+
+**[Full user guide: every control, organized by panel →](docs/user-guide.md)**
 
 ## Pick your next five minutes
 

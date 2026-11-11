@@ -1,5 +1,7 @@
 # A day with Bollard
 
+For the button-by-button reference, see the [user guide](user-guide.md).
+
 ## Start a stream
 
 In the picker: choose an active conversation, an existing worktree, a remote
