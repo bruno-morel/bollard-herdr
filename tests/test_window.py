@@ -35,3 +35,11 @@ class Windows(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'no duplicate'):
                 W.launch_window(Path(d),{'stream':'demo'})
             spawn.assert_not_called()
+
+    def test_focus_uses_terminal_not_stale_tab_labels(self):
+        with patch.object(W.sp, 'run') as run:
+            W.focus_context('/fake/herdr', {}, {'terminal': 'host/t1'})
+            self.assertEqual(run.call_count, 1)
+            args = run.call_args.args[0]
+            self.assertEqual(args[1:3], ['do', 'pane.focus'])
+            self.assertEqual(json.loads(args[3]), {'terminal': 'host/t1'})

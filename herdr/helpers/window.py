@@ -89,17 +89,7 @@ def prepare(source,lane,context=None):
 def focus_context(executable,env,context):
  terminal=context.get('terminal')
  if not terminal:return
- cli=shutil.which('hc')
- if cli:
-  try:
-   result=sp.run([cli,'get',terminal,'--json'],capture_output=True,text=True,timeout=5)
-   row=json.loads(result.stdout) if not result.returncode else {}
-   labels=row.get('labels') or {}
-   prefix=terminal.rsplit('/',1)[0]+'/' if '/' in terminal else ''
-   for command,key in (('space.select','herdr.space'),('tab.select','herdr.tab')):
-    value=labels.get(key)
-    if value:sp.run([executable,'do',command,json.dumps({'id':prefix+value})],env=env,capture_output=True,text=True,timeout=3)
-  except (sp.SubprocessError,OSError,ValueError):pass
+ # The layout binds the terminal directly; labels are not native tab IDs.
  sp.run([executable,'do','pane.focus',json.dumps({'terminal':terminal})],env=env,capture_output=True,text=True,timeout=3)
 
 def open_window(source,lane,context=None):

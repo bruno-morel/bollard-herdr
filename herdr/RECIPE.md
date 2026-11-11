@@ -2,9 +2,10 @@
 
 Two streams. Keep the conversation; bring the tools to it.
 
-![First launch, before choosing streams](preview.png)
+![Codex and Claude stacked alongside a Cursor example stream](preview.png)
 
-The preview contains no personal hosts, projects, conversations or account data.
+The preview shows three example conversations in this public repository, using
+Codex, Claude and Cursor. No account credentials or private project content is shown.
 The desktop starts with two unpinned streams. Planning above, coding below—or
 pick any two conversations. No sheep. The agents wander enough already.
 

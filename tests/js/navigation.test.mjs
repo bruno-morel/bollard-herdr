@@ -25,3 +25,17 @@ test('a window acknowledgement failure cannot replay the opening request', async
  assert.equal(store['repo.operation-status'].top.error,true);
  delete globalThis.navigationTest;
 });
+
+test('stream labels never become native tab IDs when opening a conversation', async()=>{
+ const calls=[]; const store={};
+ globalThis.navigationTest={operation:()=>({}),addLane:()=>{},laneIds:()=>['top'],layout:()=>({}),
+ shared:key=>store[key],setShared:(key,v)=>{store[key]=v;},terminals:()=>[],exec:async()=>{},hc:async()=>{},
+ run:(name,args)=>calls.push([name,args]),notify:()=>{},appHome:()=>'/app'};
+ const source=readFileSync(new URL('../../desktop/shared/navigation.js',import.meta.url),'utf8').replace(/import\s*\{[^}]*\}\s*from\s*'[^']+';/g,'');
+ const prelude='const {operation,addLane,laneIds,shared,setShared,terminals,exec,hc,run,notify,appHome,layout}=globalThis.navigationTest;\n';
+ const {showConversation}=await import('data:text/javascript;base64,'+Buffer.from(prelude+source+'\n// focus test').toString('base64'));
+ showConversation({address:'t1',cwd:'/repo',labels:{'herdr.space':'old-space','herdr.tab':'4','repo-tools.stream':'demo','repo-tools.role':'studio'}},'host','top');
+ assert.equal(store['repo.portrait.lanes'].top.terminal,'host/t1');
+ assert.deepEqual(calls,[['pane.focus',{terminal:'host/t1'}]]);
+ delete globalThis.navigationTest;
+});

@@ -152,3 +152,13 @@ resume picker says **No sessions found**, exit it, then choose **n (new chat)** 
 the existing terminal's launcher menu. This starts the first conversation in the
 same checkout and role; it does not create another stream. If history does exist,
 select it instead. Reopening a terminal is not proof authentication succeeded.
+
+## Conversation launcher menu
+
+After an agent exits, choose **n / new** to start a new conversation with the
+role and handoff prompt, or **r / resume** to select saved history. `r <ID>`
+resumes a specific conversation. Typing `codex`, `claude` or `cursor` only
+selects the provider; it does not start anything until you choose New or Resume.
+`n cursor` selects Cursor and starts fresh in one step. Enter redisplays the menu.
+A new conversation keeps the current checkout and files. Use the checkpoint
+workflow first if the outgoing conversation has progress to save.

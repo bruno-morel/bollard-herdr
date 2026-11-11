@@ -29,8 +29,6 @@ export function showConversation(t, on, lane = null, options = {}) {
     });
     lane = id;
   }
-  const space = qualify(on, t.labels?.['herdr.space']),
-    tab = qualify(on, t.labels?.['herdr.tab']);
   if (lane) {
     const old = shared('repo.portrait.lanes') || {};
     setShared('repo.portrait.lanes', {
@@ -46,12 +44,7 @@ export function showConversation(t, on, lane = null, options = {}) {
       }
     });
   }
-  if (space) run('space.select', {
-    id: space
-  });
-  if (tab) run('tab.select', {
-    id: tab
-  });
+  // Terminal labels group streams; they are not native window tab IDs.
   run('pane.focus', {
     terminal: qualify(on, t.address)
   });

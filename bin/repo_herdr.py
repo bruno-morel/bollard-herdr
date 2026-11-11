@@ -280,6 +280,24 @@ def run_once(api, root, role, stream, name, mode, resume_id='', take=False, task
         return 130
 
 
+def conversation_choice(choice, name):
+    """Selecting a provider never implicitly creates or resumes a chat."""
+    parts = choice.strip().split()
+    if not parts:
+        return ('menu', name, '')
+    if len(parts) == 1 and parts[0] in AGENTS:
+        return ('agent', parts[0], '')
+    if parts[0] in ('n', 'new') and len(parts) <= 2:
+        provider = parts[1] if len(parts) == 2 else name
+        if provider in AGENTS:
+            return ('new', provider, '')
+    if parts[0] in ('r', 'resume') and len(parts) <= 2:
+        return ('resume', name, parts[1] if len(parts) == 2 else '')
+    if parts in (['s'], ['shell']):
+        return ('shell', name, '')
+    return ('invalid', name, '')
+
+
 def pane_main(argv):
     p = argparse.ArgumentParser()
     p.add_argument('role', choices=('studio', 'work'))
@@ -302,8 +320,12 @@ def pane_main(argv):
         if not sys.stdin.isatty():
             return code
         while True:
-            print('Enter/r: resume picker | r <ID>: resume chat | n: new chat | s: shell')
-            print('codex / claude / cursor: switch agent and open its resume picker')
+            print(f'Selected agent: {name}. This checkout and handoff stay unchanged.')
+            print('n / new: START NEW conversation with the role prompt')
+            print('r / resume: RESUME a saved conversation (r <ID> for a specific chat)')
+            print('No saved conversations? Choose n. Login recovery does not create history.')
+            print('codex / claude / cursor: select agent only; then choose n or r')
+            print('n <agent>: start new with that agent | s: shell | Enter: show this menu')
             try:
                 choice = input('Choice: ').strip()
             except KeyboardInterrupt:
@@ -311,19 +333,16 @@ def pane_main(argv):
                 continue
             except EOFError:
                 return 0
-            mode, resume_id, take = 'resume', '', False
-            if choice in ('', 'r', 'resume'):
+            action, selected, selected_id = conversation_choice(choice, name)
+            if action == 'agent':
+                name = selected
+                continue
+            if action == 'menu':
+                continue
+            if action in ('new', 'resume'):
+                name, mode, resume_id, take = selected, action, selected_id, False
                 break
-            if choice.startswith('r ') and choice[2:].strip():
-                resume_id = choice[2:].strip()
-                break
-            if choice in ('n', 'new'):
-                mode = 'new'
-                break
-            if choice in AGENTS:
-                name = choice
-                break
-            if choice in ('s', 'shell'):
+            if action == 'shell':
                 print('Opening a shell in this checkout. Exit the shell to return to this menu.')
                 shell = os.environ.get('SHELL') or '/bin/zsh'
                 try:
@@ -331,7 +350,7 @@ def pane_main(argv):
                 except KeyboardInterrupt:
                     pass
                 continue
-            print('Choose r, n, s, or an agent name.')
+            print('Choose n for NEW, r for RESUME, s for shell, or select an agent.')
 
 
 def guard_remove(path):
