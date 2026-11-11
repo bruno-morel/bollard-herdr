@@ -36,6 +36,9 @@ flowchart LR
 Keep terminal rendering out of the backend. Keep agent launches out of drawing
 code. The CLI is an entry point, not an importable toolbox in disguise.
 
+`repo_flow_menu` handles the plain-text menu and passes choices to `repo-flow`.
+It never owns workflow state, review allowances or agent locks.
+
 ## Check a change
 
 ```sh
