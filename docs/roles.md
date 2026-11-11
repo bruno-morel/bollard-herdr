@@ -41,3 +41,12 @@ recovery, ownership, checkpoint and review code; adding a JSON key is rejected.
 
 Labels are at most 40 characters, descriptions 160, instructions 8,000. Invalid
 configuration reports its path rather than silently launching with defaults.
+
+## Removed a stream but its name is still taken?
+
+Removing a conversation or checkout can preserve its Git branch. Active
+conversations and existing worktrees will not show a branch without a checkout.
+Choose **New conversation → Start from → Existing branch**, select the preserved
+`codex/<stream>` branch, and choose the desired role/provider. Recovery restores
+committed files without resetting the branch. Deleted uncommitted files cannot
+be recovered from the branch. Do not delete the branch just to reuse the name.

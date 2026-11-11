@@ -241,7 +241,7 @@ def prepare(path, source, stream, folder=None, ref=None, checkout=None, retry=Fa
             elif source == "new":
                 if local in refs or any(r["stream"] == stream for r in refs.values()):
                     fail(
-                        "This stream already exists locally or on a known remote. Select it from Worktrees or Branches to resume it."
+                        "The Git branch for this stream still exists, even if its conversation or worktree was removed. Choose New conversation → Start from → Existing branch and select codex/" + stream + "; this restores its checkout without replacing saved commits. If its worktree is listed, choose Existing worktree instead."
                     )
             else:
                 fail(
