@@ -293,32 +293,6 @@ load_state() {
     activate_compose
 }
 
-next_slot() {
-    local slot=1
-    local f
-    local used
-
-    while (( slot < 100 )); do
-        used=0
-
-        for f in "$RUNTIME"/work/*/*/state.env(N) "${XDG_STATE_HOME:-$HOME/.local/state}"/*/*/state.env(N); do
-            if grep -q "^SLOT=$slot$" "$f"; then
-                used=1
-                break
-            fi
-        done
-
-        if (( ! used )); then
-            echo "$slot"
-            return
-        fi
-
-        (( slot++ ))
-    done
-
-    die "no free workspace slots"
-}
-
 session_exists() {
     local sessions
     sessions="$(zellij list-sessions --no-formatting 2>/dev/null)" || return 1
@@ -371,28 +345,6 @@ activate_compose() {
     if [[ -z "${WORK_LAYOUT:-}" && -f "$COMPOSE_FILE" ]] && grep -q '"tenhumans"' "$COMPOSE_FILE"; then
         LAYOUT=work-tenhumans
     fi
-}
-
-save_state() {
-    local slug="$1"
-    local slot="$2"
-    local worktree="$3"
-    local dir
-    dir="$(state_dir "$slug")"
-
-    cat > "$dir/state.env" <<EOF
-SLUG=$slug
-SLOT=$slot
-WORKTREE_PATH=${(q)worktree}
-ENV_SOURCE_ROOT=${(q)ROOT}
-BRANCH=codex/$slug
-SESSION=$(python3 "$BIN_DIR/repo_sessions.py" name work "$worktree")
-PORT_TENHUMANS=$((5173 + slot * 100))
-PORT_TENGAYS=$((5174 + slot * 100))
-PORT_TENLEZ=$((5175 + slot * 100))
-PORT_POSTGRES=$((5432 + slot * 100))
-PORT_REDIS=$((6379 + slot * 100))
-EOF
 }
 
 # Shared Studio/Work streams v1

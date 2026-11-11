@@ -85,6 +85,46 @@ class Installer(unittest.TestCase):
         self.assertIn(str(self.home), data)
         self.assertNotIn("@HOME@", data)
 
+    def test_python_cache_is_not_installed(self):
+        cache = self.source / "bin/__pycache__"
+        cache.mkdir()
+        (cache / "module.cpython-311.pyc").write_bytes(b"cache")
+        self.run_install("--apply")
+        self.assertFalse((self.home / ".local/bin/__pycache__").exists())
+
+    def test_preview_makes_no_files(self):
+        with patch.object(I, "SOURCE", self.source), patch.object(
+            Path, "home", return_value=self.home
+        ), patch("sys.argv", ["install.py", "laptop"]), patch.dict(
+            "os.environ", {"XDG_STATE_HOME": str(self.home / "state")}
+        ), contextlib.redirect_stdout(io.StringIO()):
+            I.main()
+        self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_failed_update_restores_previous_files_and_manifest(self):
+        self.run_install("--apply")
+        installed = self.home / ".local/bin"
+        before = {p.name: p.read_bytes() for p in installed.iterdir()}
+        manifest = self.home / "state/repo-tools/source-install.json"
+        old_manifest = manifest.read_bytes()
+        for p in (self.source / "bin").iterdir():
+            p.write_text("changed = True\n")
+        write = I.atomic_write
+        calls = 0
+
+        def fail_second(path, data, mode):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("disk failure")
+            return write(path, data, mode)
+
+        with patch.object(I, "atomic_write", side_effect=fail_second):
+            with self.assertRaisesRegex(OSError, "disk failure"):
+                self.run_install("--apply")
+        self.assertEqual(before, {p.name: p.read_bytes() for p in installed.iterdir()})
+        self.assertEqual(old_manifest, manifest.read_bytes())
+
     def test_apply_then_verify(self):
         self.run_install("--apply")
         self.run_install("--verify")

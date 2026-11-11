@@ -32,7 +32,7 @@ def atomic_write(path, data, mode):
 
 def targets(profile, home):
     for source in sorted((SOURCE / "bin").rglob("*")):
-        if source.is_file():
+        if source.is_file() and "__pycache__" not in source.parts and source.suffix != ".pyc":
             yield source, home / ".local/bin" / source.relative_to(SOURCE / "bin")
     for source in sorted((SOURCE / "zellij/layouts").glob("*.kdl")):
         yield source, home / ".config/zellij/layouts" / source.name

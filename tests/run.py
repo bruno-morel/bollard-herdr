@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test the candidate scripts with installed dependencies, never live agents."""
+"""Test repository sources in an isolated home; never use installed workflow tools."""
 from pathlib import Path
 import os
 import shutil
@@ -11,14 +11,17 @@ source = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="repo-tools-tests-") as directory:
     stage = Path(directory)
     shutil.copy2(source / "install.py", stage / "install.py")
-    for path in (source / "bin").iterdir():
-        if path.is_file():
-            shutil.copy2(path, stage / path.name)
+    shutil.copytree(source / "bin", stage, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for path in (source / "tests").glob("test_*.py"):
         shutil.copy2(path, stage / path.name)
-    env = dict(os.environ, PYTHONPATH=str(stage), PYTHONDONTWRITEBYTECODE="1")
-    # Test_checkpoint puts installed tools first; load the shared contract explicitly
-    # from this stage in the subprocess, before unittest discovers test modules.
+    home = stage / "home"
+    home.mkdir()
+    env = dict(os.environ, HOME=str(home), PYTHONPATH=str(stage),
+               PYTHONDONTWRITEBYTECODE="1", XDG_STATE_HOME=str(home / "state"),
+               XDG_CONFIG_HOME=str(home / "config"), XDG_CACHE_HOME=str(home / "cache"),
+               GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    # Resolve only repository modules, even if this machine has an older install.
     subprocess.run(
         [
             sys.executable,

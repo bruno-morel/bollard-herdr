@@ -2,7 +2,6 @@ import contextlib, hashlib, importlib.util, io, json, os, subprocess as sp, sys,
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.append(str(Path.home() / ".local/bin"))
 spec = importlib.util.spec_from_file_location(
     "checkpoint", Path(__file__).with_name("repo-new-conversation.py")
 )
