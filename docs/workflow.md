@@ -103,6 +103,21 @@ flowchart LR
 This commits and pushes your stream. A failed step is visible; retry rechecks
 identity and resumes the checkpoint. It does not invent a clean slate.
 
+## Wrong repository? Transfer the documents
+
+From the source repository, with the destination on a clean main/master checkout:
+
+```sh
+studio transfer my-feature /path/to/destination           # preview
+# Pause the source agent before applying the snapshot.
+studio transfer my-feature /path/to/destination --apply
+```
+
+This creates a destination stream and copies selected documents. It preserves
+the source and existing briefs; it does not migrate conversation history or push
+commits. Conflicts stop the transfer. If preparation fails after creating the
+worktree, the printed path is retained for inspection—not deleted behind you.
+
 ## Leaving
 
 Detach to leave an agent running. Closing a session is different from deleting
