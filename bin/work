@@ -320,7 +320,9 @@ require_clean_worktree() {
     [[ -n "$studio_session" ]] &&
         die "stop the stream's Studio session before removing its worktree"
 
-    if [[ -n "$(git -C "$worktree" status --porcelain)" ]]; then
+    local changes
+    changes="$(git -C "$worktree" status --porcelain)" || die "cannot inspect worktree changes; nothing removed"
+    if [[ -n "$changes" ]]; then
         echo
         git -C "$worktree" status --short
         echo
@@ -574,7 +576,11 @@ case "${1:-}" in
         ;;
 
     finish)
+        (( $# == 2 || $# == 3 )) || die "usage: work finish <feature> [--delete-remote]"
         [[ -n "${2:-}" ]] || die "usage: work finish <feature> [--delete-remote]"
+        if (( $# == 3 )); then
+            [[ "$3" == --delete-remote ]] || die "unknown option: $3"
+        fi
 
         slug="$(slugify "$2")"
         delete_remote=0
