@@ -2,7 +2,6 @@
 """Studio/Work terminal dashboard: tools above the same herdr-core conversations."""
 import argparse
 import fcntl
-import json
 import os
 from pathlib import Path
 import shutil

@@ -3,7 +3,6 @@ import json
 import math
 from pathlib import PurePosixPath
 import re
-import time
 import unicodedata
 
 DOCS = {'.md', '.markdown', '.mdown', '.mkd', '.txt'}

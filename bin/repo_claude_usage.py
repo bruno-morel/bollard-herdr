@@ -4,7 +4,6 @@ import fcntl
 import json
 import math
 import os
-from pathlib import Path
 import pty
 import re
 import select

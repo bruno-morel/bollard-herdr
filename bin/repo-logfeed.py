@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A leased, bounded Docker log follower. Never starts/stops containers."""
-import collections,fcntl,hashlib,importlib.util,json,os,selectors,signal,subprocess as sp,sys,time,uuid
+import fcntl,hashlib,importlib.util,json,os,selectors,signal,subprocess as sp,sys,time,uuid
 from pathlib import Path
 BIN=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('observe',BIN/'repo-observe.py');O=importlib.util.module_from_spec(spec);spec.loader.exec_module(O)

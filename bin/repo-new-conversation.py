@@ -61,13 +61,7 @@ def paths(stream):
 
 
 def guard(flow, review):
-    if R.read(flow / "state.json", {}).get("state") in (
-        "queued",
-        "preparing",
-        "implementing",
-        "fixing",
-        "reviewing",
-    ):
+    if R.read(flow / "state.json", {}).get("state") in O.WORKFLOW_ACTIVE:
         raise RuntimeError(
             "Pause/finish the implementation workflow before starting a fresh conversation"
         )

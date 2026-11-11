@@ -11,7 +11,6 @@ import stat
 import subprocess as sp
 import sys
 import tempfile
-import time
 BIN=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('panel_review',BIN/'repo-review.py');R=importlib.util.module_from_spec(spec);spec.loader.exec_module(R)
 
