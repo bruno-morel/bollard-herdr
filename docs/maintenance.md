@@ -1,8 +1,8 @@
 # Cleanup audit
 
-**In progress.** Green tests are evidence, not a graduation ceremony.
+**Completed: 2026-11-11.** Keep the checks; lose the ceremony.
 
-## Verified so far
+## What changed and how we checked it
 
 | Area | Evidence |
 | --- | --- |
@@ -18,12 +18,33 @@
 Tests run with isolated HOME/Git settings. They never launch paid agents.
 Mocks replace external boundaries, not the rules being tested.
 
-## Remaining audit
+## Final verification
 
-- **Packaging:** finish the upstream notice comparison and gallery discovery check.
-- **Final pass:** run the full checks against the final commit and verify both hosts.
+| Check | Result |
+| --- | --- |
+| Python suite | 265 passed on laptop and remote development host |
+| Desktop logic | 7 Node tests passed |
+| Native desktop | All 14 packaged mods passed `herdr-app check` |
+| Published source | 246 files checked; 34 generated helpers match their shared sources |
+| Installed copies | 402 laptop files and 69 remote files verified |
+| Documentation | 11 relative links resolve; setup and workflow examples checked against the commands |
+| CI | [Source checks passed](https://github.com/bruno-morel/bollard-herdr/actions/runs/43104621959) |
 
-These are review tasks, not instructions to split every large file.
+Code verified at `64ee159`; the closing change only records this audit.
+The tests cover failure paths and real disposable Git repositories, not just
+happy-path mocks. The terminal smoke test uses real curses screens at 44×24 and
+120×50, including resize back to phone width. No paid agent was started.
+
+## Packaging
+
+The distributed Herdr license matches upstream and the installed app. Adapted
+components retain their `cloned_from` metadata; origins and modifications are
+listed in `THIRD_PARTY_NOTICES.md`. The public preview contains no personal data.
+
+The public repository has the `herdr-layout` topic and the gallery folder contains
+its recipe, layout, mods and preview. It meets the [published packaging rules](https://herdr.dev/gallery/#share).
+Bollard was **not visible in the gallery when checked**. Discovery is not a
+verified release milestone; direct installation from GitHub remains available.
 
 ## Keep these constraints
 

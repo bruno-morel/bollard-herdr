@@ -106,7 +106,8 @@ layout files contain personal stream pins and are never overwritten by sync.
 The optional `tenhumans` Zellij layouts retain project-specific service names;
 the generic `work` layout doesn't require them.
 
-## Cleanup in progress
+## Audit record
 
-See [the audit](maintenance.md) for open architectural work. Passing tests are
-not permission to declare an audit finished.
+See [the cleanup audit](maintenance.md) for the boundaries, failure cases and
+verification results. Add a regression check when fixing a bug; don’t turn every
+small edit into a full-stack expedition.
