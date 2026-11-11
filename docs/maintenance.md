@@ -11,7 +11,7 @@
 | Boundaries | Picker, transport, terminal input, menu, display rows and refresh queries live outside workflow controllers. |
 | Workflow tests | Stream identity, checkpoint retries, completion evidence, bounded review and helper ownership. |
 | Git tests | Real disposable repos: merge previews, stale tokens, ignored files and conflicts. |
-| Failure tests | Installer rollback, interrupted state writes, Docker exits/leases, lost startup replies and ownership. |
+| Failure tests | Installer rollback, interrupted state writes, Docker lifecycle/ownership, TUI stream-switch races and refresh failures. |
 | Docs | Short guides, diagrams, checked relative links and first-test setup. |
 
 Tests run with isolated HOME/Git settings. They never launch paid agents.
@@ -19,7 +19,7 @@ Mocks replace external boundaries, not the rules being tested.
 
 ## Remaining audit
 
-- **TUI:** async result ownership, document routing and deferred interactions.
+- **TUI:** finish document-routing and deferred-interaction checks.
   Exercise the actual picker and panels after automated checks.
 - **Controllers:** finish reviewing `repo-flow.py` orchestration and call sites;
   inspect remaining provider, transfer/recovery and shell cleanup failure paths.

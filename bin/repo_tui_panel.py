@@ -78,7 +78,6 @@ class Panel:
         self.request = None
         self.geometry = None
         self.reported = None
-        self.last_lead = 0
         self.close_requested = False
         self.click_rows = []
         self.address = None
@@ -104,7 +103,11 @@ class Panel:
     def fetch(self, key, fn, period=10, force=False):
         if key in self.pending:
             return
-        if not force and time.monotonic() - self.last.get(key, 0) < period:
+        if (
+            not force
+            and key in self.last
+            and time.monotonic() - self.last[key] < period
+        ):
             return
         self.last[key] = time.monotonic()
         self.pending[key] = (self.address, self.pool.submit(fn))
@@ -138,21 +141,40 @@ class Panel:
             except (RuntimeError, OSError, ValueError, sp.SubprocessError) as e:
                 self.errors[key] = str(e)
 
+    def select_stream(self, row):
+        """Forget work from the previous selection, even on an A → B → A switch."""
+        address = row.get("address")
+        self.row = row
+        if address == self.address:
+            return
+        for _, future in self.pending.values():
+            future.cancel()
+        self.pending.clear()
+        if self.markdown_future:
+            self.markdown_future.cancel()
+        self.address = address
+        self.cache = {}
+        self.errors = {}
+        self.last = {}
+        self.preview = None
+        self.preview_request = None
+        self.preview_focus = False
+        self.selected_path = None
+        self.folder = ""
+        self.index = 0
+        self.offset = 0
+        self.message = ""
+        self.route_pending = None
+        self.route_ready = None
+        self.route_ack = None
+        self.doc_history = []
+        self.checkpoint_notice = None
+        self.markdown_key = None
+        self.markdown_future = None
+        self.markdown_visible = False
+
     def sync(self):
-        row = lane_state(self.lane)
-        if row.get("address") != self.address:
-            self.row = row
-            self.address = row.get("address")
-            self.cache = {}
-            self.errors = {}
-            self.last = {}
-            self.preview = None
-            self.folder = ""
-            self.index = 0
-            self.route_pending = None
-            self.route_ready = None
-            self.route_ack = None
-            self.doc_history = []
+        self.select_stream(lane_state(self.lane))
         c = state(self.lane)
         if self.view == "info":
             self.tab = c.get("info_tab", "agents")
