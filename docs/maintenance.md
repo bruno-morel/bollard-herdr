@@ -12,6 +12,7 @@
 | Workflow tests | Stream identity, checkpoint retries, completion evidence, bounded review, helper ownership and ambiguous task delivery. |
 | Git tests | Real disposable repos: merge previews, stale tokens, ignored files and conflicts. |
 | Failure tests | Installer rollback, interrupted writes, Docker ownership, stream-switch races, transfer/recovery failures, quota refresh, worktree removal and rejected remote-deletion retries. |
+| TUI | Real pseudo-terminal: phone/desktop resizing, conversation picker, changed-file folders, Markdown paging and Docker log scrolling. |
 | Docs | Short guides, diagrams, checked relative links, installer profiles and first-test setup. |
 
 Tests run with isolated HOME/Git settings. They never launch paid agents.
@@ -19,8 +20,6 @@ Mocks replace external boundaries, not the rules being tested.
 
 ## Remaining audit
 
-- **TUI:** document routing, render-before-ack and history have automated checks.
-  Exercise the actual picker and panels, including phone-sized resizing.
 - **Packaging:** finish the upstream notice comparison and gallery discovery check.
 - **Final pass:** run the full checks against the final commit and verify both hosts.
 
