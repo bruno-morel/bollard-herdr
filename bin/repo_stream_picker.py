@@ -259,7 +259,7 @@ class Picker:
                     (
                         "agent",
                         "Agent   " + agent + "  ▾",
-                        "Codex or Cursor. No Claude usage.",
+                        "Codex, Claude or Cursor; uses the selected account.",
                     )
                 ]
                 if not istree:
@@ -358,8 +358,9 @@ class Picker:
                     [
                         ("codex", "Codex", "Uses your connected account"),
                         ("cursor", "Cursor", "Uses your connected account"),
+                        ("claude", "Claude", "Uses your connected account"),
                     ],
-                    selected=0 if agent == "codex" else 1,
+                    selected=("codex", "cursor", "claude").index(agent),
                 )
                 if choice:
                     agent = choice

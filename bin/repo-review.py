@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded independent reviews. No model runs during prepare/status/help."""
 import argparse
+import repo_agents as agents
 from repo_checks import validate_commands
 from contextlib import contextmanager
 import fcntl
@@ -22,7 +23,7 @@ from repo_test_report import summary as native_summary
 BIN = Path(__file__).resolve().parent
 MAX_TURNS, CLAUDE_SECONDS = 24, 1200
 MAX_FILE = 256_000
-STATES = {'not-reviewed':'Not reviewed','preflight':'Running checks','reviewing':'Claude reviewing',
+STATES = {'not-reviewed':'Not reviewed','preflight':'Running checks','reviewing':'Independent review',
           'changes-required':'Changes required','incomplete':'Blocked / incomplete',
           'verified':'Verified for this version','stale':'Stale'}
 
@@ -202,15 +203,54 @@ def claude_readiness():
     except (OSError,ValueError,sp.SubprocessError):
         return dict(result,code='unavailable',message='Could not verify Claude sign-in. Run claude auth status on this machine, then check again.',command='claude auth status')
 
-def doctor(root,stream):
-    account=claude_readiness();path=config_path(root,stream)
+def reviewer_readiness(name):
+    if name == 'claude': return claude_readiness()
+    command = 'codex login' if name == 'codex' else 'agent login'
+    result = dict(ready=False, command=command, verify_command='codex login status' if name == 'codex' else 'agent status')
+    try:
+        binary = agents.executable(name)
+        review_env(name)
+        p = sp.run([binary, *(['login', 'status'] if name == 'codex' else ['status'])], capture_output=True, text=True, timeout=10)
+        text = (p.stdout + p.stderr).lower()
+        ok = p.returncode == 0 and any(x in text for x in ('logged in', 'authenticated')) and not any(x in text for x in ('not logged', 'not authenticated', 'logged out'))
+        if name == 'codex' and 'chatgpt' not in text: ok = False
+        return dict(result, ready=ok, code='ready' if ok else 'sign-in', message=name + (' connected.' if ok else ' sign-in could not be verified. Run ' + command + ' on this host.'))
+    except (RuntimeError, OSError, sp.SubprocessError) as exc:
+        return dict(result, code='unavailable', message=str(exc))
+
+
+def review_env(name):
+    if name == 'claude': return clean_env()
+    env = dict(os.environ)
+    for key in ('OPENAI_API_KEY', 'CODEX_API_KEY', 'CURSOR_API_KEY'):
+        if env.get(key): fail('Review uses your CLI login; remove ' + key + ' to avoid unexpected API billing')
+    return env
+
+
+def independent(reviewer, implementer):
+    if implementer not in agents.AGENTS:
+        fail('Implementation agent is unknown. Supply --implemented-by codex|claude|cursor or open the Work conversation first.')
+    if reviewer == implementer:
+        fail('Independent review needs a different agent provider; choose --reviewer explicitly.')
+
+
+def implementation_agent(runtime, explicit=None):
+    saved = runtime.parents[2]/'agents'/runtime.parent.name/runtime.name/'work.agent'
+    actual = saved.read_text().strip() if saved.is_file() else None
+    if explicit and actual and explicit != actual:
+        fail('--implemented-by disagrees with the saved Work agent')
+    return actual or explicit
+
+
+def doctor(root,stream,reviewer='claude'):
+    account=reviewer_readiness(reviewer);path=config_path(root,stream)
     inputs={'exists':path.exists(),'ready':False,'path':str(path.relative_to(root)),'command':'work review '+stream+' --prepare'}
     try:
         load_config(root,stream);inputs.update(ready=True,message='Acceptance criteria and project checks are ready.')
     except (RuntimeError,OSError,ValueError) as e:
         inputs['message']=str(e) if inputs['exists'] else 'Prepare review inputs, then fill in the acceptance criteria and existing project checks.'
-    return {'ready':account['ready'] and inputs['ready'],'claude':account,'inputs':inputs,
-            'message':'Ready for a bounded review.' if account['ready'] and inputs['ready'] else 'Review needs setup. No Claude call has been used.'}
+    return {'ready':account['ready'] and inputs['ready'],'claude':account if reviewer=='claude' else None,'reviewer':reviewer,'account':account,'inputs':inputs,
+            'message':'Ready for a bounded review.' if account['ready'] and inputs['ready'] else 'Review needs setup. No model call has been used.'}
 
 def auth():
     status=claude_readiness()
@@ -249,7 +289,7 @@ def reserve(previous,follow,new_cycle):
         return {'cycle':uuid.uuid4().hex[:12],'calls':0,'rounds':[]}
     if previous.get('calls',0)==0: return previous
     if not follow: fail('initial review already used; use --follow-up, or explicitly --new-cycle for a new allowance')
-    if previous.get('calls',0)>=2: fail('both Claude reviews are used; explicitly request --new-cycle for any more')
+    if previous.get('calls',0)>=2: fail('both review attempts are used; explicitly request --new-cycle for any more')
     return previous
 
 def process(argv,root,log,seconds,env=None,tick=None):
@@ -382,6 +422,7 @@ def worker(runtime,token):
         s=read(runtime/'state.json')
         if not s or s.get('token')!=token: fail('review launch token no longer matches')
         root=Path(s['root']); stream=s['stream']; c=s['config']; artifacts=Path(s['artifacts'])
+        reviewer=s.get('reviewer','claude')
         evidence=[]; result={}; state='incomplete'; reason=''
         def tick():
             if time.time()-s.get('heartbeat',0)>10: state_set(runtime,s,heartbeat=time.time())
@@ -397,9 +438,10 @@ def worker(runtime,token):
                 evidence.append(e); state_set(runtime,s,checks=evidence)
             if fingerprint(root,stream,c)!=s['fingerprint']: fail('checks changed source files; reconcile changes and review again')
             if any(e['exit_code'] for e in evidence):
-                state='changes-required'; reason='Routine checks failed. Fix them before using Claude; no allowance consumed.'
+                state='changes-required'; reason='Routine checks failed. Fix them before review; no allowance consumed.'
             else:
-                env=auth()
+                env=auth() if reviewer=='claude' else review_env(reviewer)
+                if s.get('implemented_by'): independent(reviewer,s['implemented_by'])
                 patch=git(root,'diff','--no-ext-diff','--no-textconv',s['fingerprint']['merge_base'],'--','.',':(exclude)scratch',':(exclude)docs/handoffs/'+stream+'/reviews',raw=True).decode(errors='replace')
                 if len(patch)>90000: fail('change exceeds the compact review budget; split the feature or review scope first')
                 job=read(runtime/'job.json'); job['evidence']=evidence; write(runtime/'job.json',job)
@@ -414,30 +456,33 @@ def worker(runtime,token):
                       '--disable-slash-commands','--strict-mcp-config','--mcp-config',json.dumps(server),
                       '--allowedTools','mcp__review__read_file,mcp__review__list_files,mcp__review__rerun_check',
                       '--permission-mode','dontAsk','--permission-prompts','none','--no-session-persistence',prompt]
+                if reviewer != 'claude':
+                    write(artifacts/'schema.json',SCHEMA)
+                    prompt=prompt.replace('Use review tools to inspect files and rerun declared checks (at most 3 reruns).', 'Inspect files read-only. Use the recorded checks; do not run shell commands or rerun tests. Request missing evidence as findings.')
+                    prompt+='\nReturn only JSON matching this schema: '+json.dumps(SCHEMA)
+                    argv=agents.structured_argv(reviewer,agents.executable(reviewer),root,artifacts,prompt)
                 # Reserve before launch: a crash/error never gives an automatic free retry.
-                state_set(runtime,s,state='reviewing',phase='Claude: adversarial review',calls=s['calls']+1,heartbeat=time.time())
-                log=artifacts/'claude.json'
+                state_set(runtime,s,state='reviewing',phase=reviewer+': adversarial review',calls=s['calls']+1,heartbeat=time.time())
+                log=artifacts/(reviewer+'.json')
                 rc=process(argv,root,log,CLAUDE_SECONDS,env=env,tick=tick)
                 for active in artifacts.glob('.active-*'):
                     try: os.killpg(int(active.read_text()),signal.SIGKILL)
                     except (ProcessLookupError,ValueError): pass
                     active.unlink(missing_ok=True)
-                if rc: fail('Claude stopped or reached a limit. This round is incomplete and consumed one review allowance.')
-                raw=json.loads(log.read_text())
-                if not isinstance(raw,dict) or raw.get('is_error') or raw.get('subtype') not in ('success',None): fail('Claude did not finish a successful review')
-                result=raw.get('structured_output')
+                if rc: fail(reviewer+' stopped or reached a limit. This round is incomplete and consumed one review allowance.')
+                result=agents.structured_result(reviewer,artifacts,log=log.name)
                 reruns=[read(p) for p in sorted(artifacts.glob('rerun-*.json'))]
                 evidence+=reruns
                 state=verdict(result,c,evidence)
                 if not isinstance(result,dict) or not isinstance(result.get('summary'),str) or not result.get('summary','').strip() or not isinstance(result.get('criteria'),list) or not all(isinstance(x,dict) and all(isinstance(x.get(k),str) for k in ('id','status','evidence')) for x in result.get('criteria',[])) or not all(isinstance(result.get(k),list) and all(isinstance(x,str) for x in result[k]) for k in ('findings','limitations')):
-                    result={}; state='incomplete'; reason='Claude returned an incomplete or invalid review record.'
+                    result={}; state='incomplete'; reason='Reviewer returned an incomplete or invalid review record.'
                 if fingerprint(root,stream,load_config(root,stream))!=s['fingerprint']:
                     state='stale'; reason='The reviewed files or requirements changed during the review.'
         except (RuntimeError,OSError,ValueError,sp.SubprocessError) as e: reason=str(e); state='incomplete'
         rel='docs/handoffs/'+stream+'/reviews/'+s['cycle']+'/round-'+str(s['attempt'])+'.md'
         report=safe(root,rel); report.parent.mkdir(parents=True,exist_ok=True)
         lines=['# Independent feature review','',STATES[state],'',f'Reviewed at: {now()}',f'Commit: {s["fingerprint"]["head"]}',f'Source fingerprint: {s["fingerprint"]["digest"]}',
-               f'Claude calls used this cycle: {s["calls"]}/2','',reason or result.get('summary','No complete independent verdict.'),'','## Acceptance evidence','']
+               f'Reviewer: {reviewer}', f'Review calls used this cycle: {s["calls"]}/2','',reason or result.get('summary','No complete independent verdict.'),'','## Acceptance evidence','']
         for x in result.get('criteria',[]): lines.append('- '+x['id']+': '+x['status']+' — '+x['evidence'])
         lines+=['','## Checks','']
         for x in evidence: lines.append('- '+x['id']+': exit '+str(x['exit_code'])+'; `'+x['log']+'` (SHA-256 '+x['sha256']+')')
@@ -456,7 +501,12 @@ def ensure_tests_idle(runtime):
 
 
 def launch(root,stream,runtime,packet,key,args):
-    auth()  # Explain account setup before touching files or starting checks.
+    previous=read(runtime/'state.json',{})
+    reviewer=getattr(args,'reviewer',None) or previous.get('reviewer','claude')
+    implementer=implementation_agent(runtime,getattr(args,'implemented_by',None))
+    independent(reviewer,implementer)
+    account=reviewer_readiness(reviewer)
+    if not account['ready']: fail(account['message']+' Next: '+account['command'])
     if not config_path(root,stream).exists(): fail('Prepare review inputs first: work review --prepare. Then fill the acceptance criteria and project test commands.')
     c=load_config(root,stream,args.base)
     if args.base: write(config_path(root,stream),c)
@@ -473,7 +523,7 @@ def launch(root,stream,runtime,packet,key,args):
         s=reserve(previous,args.follow_up,args.new_cycle)
         attempt=len(s.get('rounds',[]))+1; token=uuid.uuid4().hex
         artifacts=safe(root,'scratch/reviews/'+s['cycle']+'/attempt-'+str(attempt)+'-'+token[:6]); artifacts.mkdir(parents=True)
-        s=dict(s,state='preflight',phase='Queued checks',root=str(root),stream=stream,config=c,fingerprint=fp,
+        s=dict(s,reviewer=reviewer,implemented_by=implementer,state='preflight',phase='Queued checks',root=str(root),stream=stream,config=c,fingerprint=fp,
                previous_result=s.get('result') or s.get('previous_result'),artifacts=str(artifacts),token=token,attempt=attempt,heartbeat=time.time(),reason='',report=None,result=None,checks=[])
         write(runtime/'job.json',s); write(runtime/'state.json',s)
         try:
@@ -483,7 +533,7 @@ def launch(root,stream,runtime,packet,key,args):
             if len(spaces)>1: fail('multiple spaces match the stream; reconcile them before reviewing')
             space=next(iter(spaces),'stream-'+key+'-'+stream)
             labels={'herdr.space':space,'herdr.tab':space+'-review','repo-tools.repo':key,'repo-tools.stream':stream,
-                    'repo-tools.role':'review','repo-tools.checkout':str(root),'repo-tools.agent':'claude'}
+                    'repo-tools.role':'review','repo-tools.checkout':str(root),'repo-tools.agent':reviewer}
             argv=['hc','run','--bg','--keep','--no-parent','--no-notify','--cwd',str(root),'--name','review-'+key[:8]+'-'+token[:10]]
             for k,v in labels.items(): argv+=['--label',k+'='+v]
             argv+=['--',sys.executable,str(BIN/'repo-review.py'),'_pane',str(runtime),token]
@@ -504,26 +554,28 @@ def main():
             print('\nReview finished. This pane stays open. Use work review --status or --follow-up when ready.',flush=True)
             os.execv('/bin/zsh',['zsh','-l'])
         return
-    p=argparse.ArgumentParser(prog='work review',description='Independent Claude review: one initial run + one follow-up per cycle; Sonnet, medium effort, 24 turns, 20 minutes per run. Help/status/prepare never call Claude.')
+    p=argparse.ArgumentParser(prog='work review',description='Independent review: Claude (default), Codex or Cursor; two calls per cycle, 20 minutes per call. Claude uses Sonnet/medium/24 turns. Help/status/prepare never call a model.')
     p.add_argument('stream',nargs='?'); p.add_argument('--base',help='explicit comparison branch, saved to review inputs')
     mode=p.add_mutually_exclusive_group(); mode.add_argument('--prepare',action='store_true');mode.add_argument('--status',action='store_true');mode.add_argument('--doctor',action='store_true')
     mode.add_argument('--follow-up',action='store_true'); mode.add_argument('--new-cycle',action='store_true',help='explicitly authorize a new pair of review allowances')
+    p.add_argument('--reviewer',choices=agents.AGENTS,help='Independent reviewer; defaults to Claude or the current cycle reviewer')
+    p.add_argument('--implemented-by',choices=agents.AGENTS,help='Implementation provider when no saved Work preference exists')
     p.add_argument('--json',action='store_true',help='machine-readable status')
     args=p.parse_args()
     if args.json and not (args.status or args.doctor): p.error('--json requires --status or --doctor')
     root,stream,runtime,packet,key=resolve(args.stream)
     if args.doctor:
-        result=doctor(root,stream)
-        print(json.dumps(result) if args.json else '\n'.join(x['message'] for x in (result['claude'],result['inputs'])))
+        result=doctor(root,stream,args.reviewer or read(runtime/'state.json',{}).get('reviewer','claude'))
+        print(json.dumps(result) if args.json else '\n'.join(x['message'] for x in (result['account'],result['inputs'])))
     elif args.status:
         s=snapshot_status(root,stream,runtime)
-        print(json.dumps(s) if args.json else s['title']+' — '+stream+'\n'+s.get('phase','')+'\n'+s.get('reason','')+'\nClaude calls remaining: '+str(s['remaining'])+('\nReport: '+str(root/s['report']) if s.get('report') else ''))
+        print(json.dumps(s) if args.json else s['title']+' — '+stream+'\n'+s.get('phase','')+'\n'+s.get('reason','')+'\nReview calls remaining: '+str(s['remaining'])+('\nReport: '+str(root/s['report']) if s.get('report') else ''))
     elif args.prepare: prepare(root,stream,args.base)
     else: launch(root,stream,runtime,packet,key,args)
 
 GUIDE='''# Independent feature review
 
-Codex implements and validates first. Claude reviews only at the end. No agent may
+The implementation agent validates first. An independent provider reviews at the end. No agent may
 claim ready to merge from a green test suite alone. Run `work review` after the
 implementation is stable. Do not edit overlapping source or requirements while
 reviewing. Changes invalidate the verdict. Review never merges or pushes.
@@ -549,20 +601,23 @@ Example structure (replace examples with real requirements and commands):
 Kinds: static, unit, integration, e2e. Every criterion needs integration or e2e
 evidence. Use cwd for a package subdirectory. Missing manual/browser/service
 validation means incomplete, never verified. Logs alone cannot prove semantics:
-Claude must inspect requirements, implementation and test quality independently.
+The reviewer must inspect requirements, implementation and test quality independently.
 It may rerun up to three declared checks, read relevant files, and request missing
 regression tests. It cannot edit files, run arbitrary shell commands, or delegate.
-Codex fixes findings without weakening assertions or silently changing requirements.
+The implementation agent fixes findings without weakening assertions or silently changing requirements.
 For regressions, record fail-before / pass-after evidence in the test output.
 
 `work review --prepare`: create inputs only; no Claude usage.
-`work review`: run checks, then initial Claude review if they pass.
+`work review`: run checks, then initial independent review if they pass.
 `work review --status`: current verdict, freshness and remaining allowance.
 `work review --follow-up`: one focused follow-up after fixes.
 `work review --new-cycle`: explicitly authorize further review after the pair.
 
 Each Claude call: Sonnet, medium effort, 24 agent turns, 20-minute wall limit.
-At most two calls per cycle; failures after launch consume an allowance. No retries,
+Select --reviewer claude|codex|cursor (Claude default). It must differ from the saved Work provider;
+use --implemented-by only when that provider is unknown. Codex/Cursor inspect recorded evidence
+in read-only/ask mode with a 20-minute wall limit; only Claude has the declared-check rerun tools.
+At most two calls per cycle across all reviewers; failures after launch consume an allowance. No retries,
 model fallback or API-key billing. Pro's own limits still apply; quota exhaustion
 is incomplete. Routine test failures do not consume a Claude allowance.
 Reports are versioned under this handoff's reviews/. Logs are in ignored scratch/.

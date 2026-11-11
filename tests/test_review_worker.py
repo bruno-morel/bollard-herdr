@@ -98,7 +98,7 @@ class WorkerFixture(unittest.TestCase):
         R.write(self.runtime / "job.json", {})
 
         def process(argv, root, log, seconds, **kwargs):
-            if argv[0] != "claude":
+            if argv[0] not in ("claude", "codex", "cursor"):
                 return self.real_process(argv, root, log, seconds, **kwargs)
             self.model_argv.append(argv)
             # Budget is reserved before any model execution, including failures.
@@ -107,9 +107,18 @@ class WorkerFixture(unittest.TestCase):
             if rerun:
                 row = R.check(root, self.config, "browser", self.artifacts, "claude-1")
                 R.write(self.artifacts / "rerun-1.json", row)
-            log.write_text(
-                json.dumps({"subtype": "success", "structured_output": self.result})
-            )
+            if argv[0] == "codex":
+                (self.artifacts / "result.json").write_text(json.dumps(self.result))
+            else:
+                log.write_text(
+                    json.dumps(
+                        {
+                            "subtype": "success",
+                            "structured_output": self.result,
+                            "result": json.dumps(self.result),
+                        }
+                    )
+                )
             if mutate:
                 R.fingerprint.return_value = dict(self.fp, digest="changed")
             return code
@@ -122,6 +131,47 @@ class WorkerFixture(unittest.TestCase):
 
 
 class ReviewWorker(WorkerFixture):
+    def test_other_reviewers_use_same_budget_and_verdict_checks(self):
+        for reviewer in ("codex", "cursor"):
+            with self.subTest(reviewer=reviewer), patch.object(
+                R.agents, "executable", return_value=reviewer
+            ), patch.object(R, "review_env", return_value=dict(os.environ)):
+                self.state.update(reviewer=reviewer, implemented_by="claude")
+                state = self.run_worker()
+                self.assertEqual(state["state"], "verified")
+                self.assertEqual(state["calls"], 1)
+                self.assertEqual(self.model_argv[-1][0], reviewer)
+                state = self.run_worker(code=1)
+                self.assertEqual(state["state"], "incomplete")
+                self.assertEqual(state["calls"], 1)
+
+    def test_same_or_unknown_implementer_refuses_review(self):
+        for provider in R.agents.AGENTS:
+            with self.assertRaisesRegex(RuntimeError, "different"):
+                R.independent(provider, provider)
+        with self.assertRaisesRegex(RuntimeError, "unknown"):
+            R.independent("claude", None)
+
+    def test_saved_work_provider_cannot_be_overridden(self):
+        saved = (
+            self.runtime.parents[2]
+            / "agents"
+            / self.runtime.parent.name
+            / self.runtime.name
+            / "work.agent"
+        )
+        saved.parent.mkdir(parents=True)
+        saved.write_text("codex\n")
+        self.assertEqual(R.implementation_agent(self.runtime), "codex")
+        with self.assertRaisesRegex(RuntimeError, "disagrees"):
+            R.implementation_agent(self.runtime, "cursor")
+
+    def test_rotating_provider_never_resets_attempt_budget(self):
+        for name in R.agents.AGENTS:
+            state = dict(cycle="same", calls=2, reviewer=name, state="incomplete")
+            with self.assertRaisesRegex(RuntimeError, "both review attempts"):
+                R.reserve(state, True, False)
+
     def test_passing_checks_use_bounded_sonnet_and_keep_rerun_evidence(self):
         state = self.run_worker(rerun=True)
         self.assertEqual(state["state"], "verified")

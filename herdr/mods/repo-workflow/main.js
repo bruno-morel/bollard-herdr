@@ -12,7 +12,7 @@ export default class Workflow extends View {
   if(!this.dialog){this.refresh(cx);cx.timer.every(15000,cx=>this.refresh(cx));cx.timer.every(5000,cx=>{cx.spawn(async cx=>{await followOpens();cx.notify();});});cx.spawn(async cx=>{for(;;){const command=await nextCommand();if(['open','prepare','implement','helper','pause'].includes(command))dialog(command);cx.notify();}});return;}
   if((props().action||'open')==='open'){this.redirect=true;const old=props().overlay;dialog('open',{...props(),overlay:undefined});if(old)closeOverlay(old);return;}
   const p=props()||{},loc=p.context||selectWorkflowContext(terminals(),spaces(),panes(),focused(),p);
-  this.action=p.action||'open';this.role=p.role||'studio';this.kind=p.kind||'research';this.agent='codex';
+  this.action=p.action||'open';this.role=p.role||'studio';this.kind=p.kind||'research';this.agent='codex';this.reviewer='claude';
   this.on=loc.on;
   const cwd=loc.cwd;
   this.folder=InputState.new({value:cwd,placeholder:'Repository or existing worktree path on this machine'});
@@ -38,6 +38,7 @@ export default class Workflow extends View {
   if(this.action==='helper'&&!task){this.message='Give the helper a focused task.';cx.notify();return;}
   const role=['prepare','implement'].includes(this.action)?'work':this.role;
   const args=['flow',this.action,stream,'--role',role,'--agent',this.agent];
+  if(this.action==='implement')args.push('--reviewer',this.reviewer);
   if(this.action==='helper')args.push('--kind',this.kind,'--scope',task);
   else if(task)args.push('--task',task);
   this.busy=true;this.message='Preparing…';
@@ -83,9 +84,10 @@ export default class Workflow extends View {
    .when(this.action==='helper',el=>el.child(h_flex().gap(5)
     .child(this.button('kind-research','Read-only research',(_e,cx)=>{this.kind='research';cx.notify();},this.kind==='research'))
     .child(this.button('kind-code','Isolated coding',(_e,cx)=>{this.kind='code';cx.notify();},this.kind==='code'))))
-   .when(this.action!=='pause',el=>el.child(h_flex().gap(5).children(['codex','cursor'].map(agent=>this.button('agent-'+agent,agent,(_e,cx)=>{this.agent=agent;cx.notify();},agent===this.agent)))))
+   .when(this.action!=='pause',el=>el.child(h_flex().gap(5).children(['codex','claude','cursor'].map(agent=>this.button('agent-'+agent,agent,(_e,cx)=>{this.agent=agent;cx.notify();},agent===this.agent)))))
+   .when(this.action==='implement',el=>el.child(h_flex().gap(5).child(div().child('Reviewer')).children(['claude','codex','cursor'].map(a=>this.button('reviewer-'+a,a,(_e,cx)=>{this.reviewer=a;cx.notify();},a===this.reviewer)))))
    .when(['helper','implement'].includes(this.action),el=>el.child(this.field('Task / scope',this.scope)))
-   .child(div().text_size(11).text_color(t.muted).child(this.action==='implement'?'Authorizes implementation, tests, fixes and the existing review allowance: at most two Sonnet calls, 12 turns / 10 minutes each. Stops for questions; no merge or push.':this.action==='helper'?'One helper at a time. Coding requires a clean committed checkpoint; the lead integrates and validates its work.':this.action==='prepare'?'Builds the handoff, opens Work and its Docker stack, then prepares the plan. Coding waits for your approval.':this.action==='pause'?'Stops further workflow steps. An agent or check already running is left intact.':'Creates or resumes the shared Git stream and repository guidance. Work also starts its existing Docker setup.'))
+   .child(div().text_size(11).text_color(t.muted).child(this.action==='implement'?'Authorizes implementation, tests, fixes and the existing review allowance: at most two review attempts, 20 minutes each (Claude: Sonnet, 24 turns). Choose a different provider from the implementation agent. Stops for questions; no merge or push.':this.action==='helper'?'One helper at a time. Coding requires a clean committed checkpoint; the lead integrates and validates its work.':this.action==='prepare'?'Builds the handoff, opens Work and its Docker stack, then prepares the plan. Coding waits for your approval.':this.action==='pause'?'Stops further workflow steps. An agent or check already running is left intact.':'Creates or resumes the shared Git stream and repository guidance. Work also starts its existing Docker setup.'))
    .when(!!this.message,el=>el.child(div().text_size(11).text_color(t.blocked).child(this.message)))
    .child(h_flex().gap(8).justify_end()
     .child(this.button('flow-cancel','Cancel',()=>closeOverlay(props().overlay)))

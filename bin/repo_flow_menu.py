@@ -44,7 +44,7 @@ def run_menu(role, dispatch):
                 continue
             preset = choices[int(n) - 1]
             file = input("Pane context JSON file: ").strip()
-            agent = input("Agent codex / cursor [codex]: ").strip() or "codex"
+            agent = input("Agent codex / claude / cursor [codex]: ").strip() or "codex"
             argv = (
                 [role, "helper"]
                 + ([stream] if stream else [])
@@ -91,7 +91,7 @@ def run_menu(role, dispatch):
                         "--target",
                         target,
                         "--agent",
-                        input("Child agent codex / cursor [codex]: ").strip()
+                        input("Child agent codex / claude / cursor [codex]: ").strip()
                         or "codex",
                     ]
             sp.run(
@@ -117,6 +117,16 @@ def run_menu(role, dispatch):
             continue
         stream = input("Stream (Enter for current): ").strip()
         argv = ["work", action] + ([stream] if stream else [])
+        if action in ("helper", "implement"):
+            argv += [
+                "--agent",
+                input("Agent codex / claude / cursor [codex]: ").strip() or "codex",
+            ]
+        if action == "implement":
+            argv += [
+                "--reviewer",
+                input("Independent reviewer [claude]: ").strip() or "claude",
+            ]
         if action == "helper":
             argv += [
                 "--kind",

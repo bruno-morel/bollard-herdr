@@ -39,7 +39,18 @@ class FlowMenu(unittest.TestCase):
 
     def test_research_and_code_helpers_preserve_studio_role_and_scope(self):
         dispatch, run, _ = self.drive(
-            ["5", "demo", "Inspect logs", "6", "demo", "Fix one widget", "q"], "studio"
+            [
+                "5",
+                "demo",
+                "claude",
+                "Inspect logs",
+                "6",
+                "demo",
+                "cursor",
+                "Fix one widget",
+                "q",
+            ],
+            "studio",
         )
         run.assert_not_called()
         args = [call.args[0] for call in dispatch.call_args_list]

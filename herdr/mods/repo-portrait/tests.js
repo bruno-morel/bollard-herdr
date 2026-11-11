@@ -19,7 +19,7 @@ export function primaryAction(s,busy=false,pending=false){
 
 export default class Tests extends View {
  init(_p,cx){
-  this.key=null;this.generation=0;this.data=null;this.busy=false;this.error='';this.actionError='';this.pendingSetup=false;this.chosen=null;this.showCommands=false;this.logOpen=false;
+  this.setupAgent='codex';this.key=null;this.generation=0;this.data=null;this.busy=false;this.error='';this.actionError='';this.pendingSetup=false;this.chosen=null;this.showCommands=false;this.logOpen=false;
   this.editor=EditorState.new({readonly:true,value:'',font_size:12,font_family:settings().font_family});
   cx.timer.every(15000,cx=>this.refresh(cx));
  }
@@ -54,7 +54,7 @@ export default class Tests extends View {
   this.actionError='';
   if(['first','send'].includes(action)){
    if(!lead){this.actionError='Open this stream’s lead conversation first, then try again.';cx.notify();return;}
-   if(action==='first')args.push('--agent',lead.labels?.['repo-tools.agent']==='cursor'?'cursor':'codex');
+   if(action==='first')args.push('--agent',this.setupAgent);
    args.push('--target',lead.address.split('/').pop());
   }
   this.busy=true;const g=this.generation,current=()=>this.key===c.key&&scopedLocation()?.key===c.key&&g===this.generation;
@@ -79,6 +79,7 @@ export default class Tests extends View {
   return v_flex().size_full().min_h(0).p(4).bg(toolColors().background).text_color(t.foreground).gap(6)
    .child(h_flex().px(12).py(6).gap(8).items_center().flex_wrap().justify_end().flex_none()
     .child(div().flex_1().font_semibold().text_size(13).child('Tests · '+label))
+    .when(missing&&!this.pendingSetup,e=>e.child(h_flex().gap(4).children(['codex','claude','cursor'].map(a=>button('tests-agent-'+a,a,(_e,cx)=>{if(!this.busy){this.setupAgent=a;cx.notify();}},{selected:this.setupAgent===a})))))
     .child(button('tests-primary',action.label,(_e,cx)=>{if(!action.disabled)this.action(action.action,cx);},{icon:action.icon||'test',strong:true}).opacity(action.disabled ? 0.55 : 1))
     .when(!!s?.configured,e=>e.child(button('tests-commands',this.showCommands?'Hide commands':'Show commands',(_e,cx)=>{this.showCommands=!this.showCommands;cx.notify();},{icon:'list',selected:this.showCommands})))
     .when(!!s?.setup_terminal,e=>e.child(button('tests-child','Open test helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.setup_terminal}),{icon:'agents'})))
@@ -91,7 +92,7 @@ export default class Tests extends View {
     .child(div().text_size(17).font_semibold().child(this.pendingSetup?'A child agent is preparing the first run':'First tests run'))
     .child(div().max_w(640).text_size(13).child(this.pendingSetup?
      'Your main conversation stays available. The child inspects the project’s existing scripts and CI, then the runner saves and executes those checks once.':
-     'A read-only Codex or Cursor child selects finite checks from the project’s existing scripts and CI. The first run starts automatically when the check list is valid. Later reruns need no model.'))
+     'A read-only child using your selected CLI selects finite checks from the project’s existing scripts and CI. The first run starts automatically when the check list is valid. Later reruns need no model.'))
     .child(caption('No feature changes, automatic fixes or Claude review. After setup, reruns execute the saved commands directly.'))
     .when(!!s.message,e=>e.child(div().text_size(12).text_color(t.muted).child(s.message)))
     .when(!!s.config_error,e=>e.child(div().mt(4).text_size(11).text_color(t.muted).child(s.config_error)))))

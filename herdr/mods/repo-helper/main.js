@@ -9,7 +9,7 @@ export const PRESETS={
 };
 export function buildArgs(context,snapshot,preset,agent,question,period,comparison){
  if(!context?.cwd||!context?.stream||!snapshot?.text||!snapshot?.parent)throw new Error('Reopen Ask a helper from a pane with selected evidence.');
- if(!PRESETS[preset]||!['codex','cursor'].includes(agent))throw new Error('Choose a preset and Codex or Cursor.');
+ if(!PRESETS[preset]||!['codex','claude','cursor'].includes(agent))throw new Error('Choose a preset and Codex, Claude or Cursor.');
  if(!question.trim()||question.length>4000)throw new Error('Give a focused question under 4,000 characters.');
  if(preset==='campaign-follow-up'&&(!/^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$/.test(period)||!/^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$/.test(comparison)))throw new Error('Enter both reporting windows as YYYY-MM-DD..YYYY-MM-DD.');
  const args=['flow','helper',context.stream,'--role',context.role,'--kind','research','--agent',agent,'--preset',preset,'--scope',question,'--context-json',JSON.stringify(snapshot)];
@@ -42,7 +42,7 @@ export default class Helper extends View{
    .child(h_flex().items_center().gap(8).flex_none().child(div().flex_1().font_semibold().text_size(19).child('Ask a helper about this')).child(div().text_size(11).text_color(t.ansi2).child('Read-only')))
    .child(div().text_size(12).text_color(t.muted).child(c?`${c.repo||c.stream} / ${c.stream} · ${c.role} · ${c.on||'This computer'}`:'No pane selected'))
    .child(h_flex().gap(6).flex_wrap().flex_none().children(Object.entries(PRESETS).map(([id,p])=>button('preset-'+id,p.title,(_e,cx)=>this.choose(id,cx),{icon:p.icon,selected:id===this.preset}))))
-   .child(h_flex().gap(6).items_center().flex_none().children(['codex','cursor'].map(a=>button('helper-'+a,a==='codex'?'Codex':'Cursor',(_e,cx)=>{if(!this.busy&&!this.attempted){this.agent=a;cx.notify();}},{selected:a===this.agent}))).child(div().text_size(11).text_color(t.muted).child('No Claude allowance used')))
+   .child(h_flex().gap(6).items_center().flex_none().children(['codex','claude','cursor'].map(a=>button('helper-'+a,a[0].toUpperCase()+a.slice(1),(_e,cx)=>{if(!this.busy&&!this.attempted){this.agent=a;cx.notify();}},{selected:a===this.agent}))).child(div().text_size(11).text_color(t.muted).child('Selected account usage; review budget unchanged')))
    .child(div().text_size(12).text_color(t.muted).child(p.detail))
    .child(this.field('Question for the helper',this.question))
    .when(this.preset==='campaign-follow-up',el=>el.child(h_flex().gap(10).flex_none().child(this.field('Reporting dates (inclusive)',this.period)).child(this.field('Comparison dates (same length)',this.comparison))))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared desktop/TUI workflow. Runtime records outside Git; review allowance owned by repo-review."""
 import argparse
+import repo_agents as agents
 import repo_operations as O
 from repo_risk_policy import POLICY as RISK_POLICY
 from collections import deque
@@ -267,8 +268,8 @@ Read the current handoff, context, implementation plan, repository instructions 
 User task: {task or 'Use the existing implementation handoff; ask if its scope is incomplete.'}
 Update implementation-plan.md and context.md; fill review-input.json with every acceptance criterion and real integration/e2e checks. Run those normal checks and inspect actual behavior before reporting ready.
 Do not weaken assertions, skip tests, reduce acceptance criteria, add fake success, or claim 100% correctness. If evidence or a decision is missing, ask the user and stop.
-A separate workflow controller owns the final review. Do not run Claude, work review, or start any other agents. Do not edit the review counter or workflow state. No merges, pushes or deployment.
-When implementation, documentation and normal checks are complete, run `{receipt}` as your LAST operation, then end your turn and wait. If that command fails, resolve the stated issue or report a blocker. Do not modify files after that receipt. The controller will run the bounded Claude review and, if appropriate, send one focused fix task back to this same conversation.
+A separate workflow controller owns the final review. Do not run work review or start any other agents. Do not edit the review counter or workflow state. No merges, pushes or deployment.
+When implementation, documentation and normal checks are complete, run `{receipt}` as your LAST operation, then end your turn and wait. If that command fails, resolve the stated issue or report a blocker. Do not modify files after that receipt. The controller will run the bounded independent review and, if appropriate, send one focused fix task back to this same conversation.
 """
     )
 
@@ -316,9 +317,13 @@ def review_wait(root, stream, runtime, job, key):
     review_dir = rr[2]
     before = R.snapshot_status(root, stream, review_dir)
     if before.get("calls", 0) >= 2:
-        fail("Both Claude calls are used. No new review cycle was authorized.")
+        fail("Both review attempts are used. No new review cycle was authorized.")
     args = argparse.Namespace(
-        base=None, follow_up=before.get("calls", 0) == 1, new_cycle=False
+        base=None,
+        follow_up=before.get("calls", 0) == 1,
+        new_cycle=False,
+        reviewer=job.get("reviewer", "claude"),
+        implemented_by=job["agent"],
     )
     check_cancel(runtime, job)
     R.launch(*rr, args)
@@ -331,7 +336,7 @@ def review_wait(root, stream, runtime, job, key):
         runtime,
         job,
         "reviewing",
-        "Running checks, then bounded Claude review; source edits are paused.",
+        "Running checks, then bounded independent review; source edits are paused.",
     )
     terminal_name = "review-" + key[:8] + "-" + expected[:10]
     deadline = time.monotonic() + 2400
@@ -406,14 +411,6 @@ def perform(runtime, job):
         fail(
             "This role is already using another agent. Switch it from its pane before continuing."
         )
-    if (
-        action == "implement"
-        and row
-        and row.get("labels", {}).get("repo-tools.agent") == "claude"
-    ):
-        fail(
-            "Automated implementation uses Codex or Cursor; Claude is reserved for final review."
-        )
     if action == "open":
         target, row = managed_open(root, stream, role, job["agent"])
         os.chdir(target)
@@ -476,7 +473,7 @@ def perform(runtime, job):
     for step in range(1, 5):
         if not receipt_valid(target, stream, runtime, job):
             fail(
-                "Agent finished without current, complete implementation evidence. Read its questions; no Claude review started."
+                "Agent finished without current, complete implementation evidence. Read its questions; no independent review started."
             )
         result = review_wait(target, stream, runtime, job, key)
         if result["state"] == "verified":
@@ -496,7 +493,7 @@ def perform(runtime, job):
             )
         if result.get("calls", 0) >= 2:
             fail(
-                "The follow-up still found issues. Both Claude calls are used; inspect the report."
+                "The follow-up still found issues. Both review attempts are used; inspect the report."
             )
         if step == 4:
             fail(
@@ -534,10 +531,9 @@ def launch(args):
                 "A previous workflow needs attention. Use work flow pause, inspect its agent, then retry explicitly."
             )
         agent = args.agent or "codex"
-        if args.action == "implement" and agent == "claude":
-            fail(
-                "Claude is reserved for bounded review; use Codex or Cursor for implementation"
-            )
+        reviewer = getattr(args, "reviewer", None) or "claude"
+        if args.action == "implement":
+            R.independent(reviewer, agent)
         target, rows = details(root, stream, key)
         if args.action != "open" and target is None:
             fail("Open a stream first")
@@ -556,7 +552,7 @@ def launch(args):
             review = R.resolve(stream)
             if read(review[2] / "state.json", {}).get("calls", 0) >= 2:
                 fail(
-                    "Both Claude calls are used. Inspect Review; only an explicit new review cycle can grant more."
+                    "Both review attempts are used. Inspect Review; only an explicit new review cycle can grant more."
                 )
             for r in rows:
                 if (
@@ -575,6 +571,7 @@ def launch(args):
             role=role,
             action=args.action,
             agent=agent,
+            reviewer=reviewer,
             task=args.task or "",
             token=token,
             state="queued",
@@ -676,8 +673,8 @@ def helper(args):
             fail("--preview requires a pane preset")
         print(json.dumps(packet, ensure_ascii=False))
         return
-    if args.agent not in (None, "codex", "cursor"):
-        fail("Helpers use Codex or Cursor; Claude is reserved for review")
+    if args.agent is not None and args.agent not in agents.AGENTS:
+        fail("Choose codex, claude or cursor")
     with H.locked(runtime / "helper.lock", "Another helper is launching"):
         job = read(runtime / "state.json", {})
         if job.get("state") in ACTIVE:
@@ -740,7 +737,7 @@ def helper(args):
         text = f"""You are a scoped {'read-only investigator' if args.kind=='research' else 'coding helper in an isolated worktree'} for {args.role.upper()} / {stream}.
 Task: {args.scope}
 Parent terminal: {address}. Parent checkout: {target}. Recorded base commit: {base}.
-Read applicable repository instructions and docs/handoffs/{stream}/ context and acceptance. Preserve existing work. Do not spawn agents, call Claude, run review, deploy, push, merge, switch branches or create another worktree. Do not use the main Work/Studio launcher or take its ownership lock.
+Read applicable repository instructions and docs/handoffs/{stream}/ context and acceptance. Preserve existing work. Do not spawn agents, call another model, run review, deploy, push, merge, switch branches or create another worktree. Do not use the main Work/Studio launcher or take its ownership lock.
 {'Do not modify any files. Report findings and evidence in this conversation.' if args.kind=='research' else 'Edit only the assigned scope in this child checkout. Run relevant checks. Do not change the parent checkout. Leave changes for the lead to inspect; report the child branch, file list, tests, limitations, and whether changes are committed. Use isolated test resources; do not start or reuse the parent Docker stack.'}
 The lead/user will collect your report in this helper tab. Do not send input to a busy agent. Stop when done and remain available for follow-up. Your completion is not final feature verification.
 """
@@ -819,6 +816,10 @@ def helper_pane(path):
         ]
         if job["kind"] == "research":
             argv += ["--ask-for-approval", "never"]
+    elif job["agent"] == "claude":
+        argv = [binary]
+        if job["kind"] == "research":
+            argv += agents.claude_read_only()
     else:
         argv = [binary, "--workspace", str(root), "--sandbox", "enabled"]
         if job["kind"] == "research":
@@ -844,7 +845,7 @@ def main(argv=None):
     role = argv.pop(0) if argv and argv[0] in ("studio", "work") else "work"
     p = argparse.ArgumentParser(
         prog=role + " flow",
-        description="Shared Herdr desktop/TUI workflow. Omit the subcommand to open the menu. Claude: one final review and one follow-up; no automatic new cycle.",
+        description="Shared Herdr desktop/TUI workflow. Omit the subcommand to open the menu. Independent review: one final review and one follow-up; no automatic new cycle.",
     )
     p.add_argument(
         "action",
@@ -857,13 +858,18 @@ def main(argv=None):
         "--retry-token",
         help="Retry exactly this failed opening; reuse its checkout and agent",
     )
-    p.add_argument("--agent", choices=["codex", "cursor"])
+    p.add_argument("--agent", choices=agents.AGENTS)
+    p.add_argument(
+        "--reviewer",
+        choices=agents.AGENTS,
+        help="Independent reviewer (default: claude)",
+    )
     p.add_argument("--task")
     p.add_argument("--scope")
     p.add_argument(
         "--preset",
         choices=list(C.PRESETS),
-        help="On-demand, read-only pane helper (Codex/Cursor)",
+        help="On-demand, read-only pane helper (Codex/Claude/Cursor)",
     )
     selected = p.add_mutually_exclusive_group()
     selected.add_argument(

@@ -49,11 +49,11 @@ information panel (roughly one-quarter width, 210–430px).
   file requests open here without replacing the conversation.
 - **Docker:** scrollable, copyable live logs. No stack gets a friendly empty state
   and an explicit Start Docker action, not a wall of red.
-- **Tests / Review:** project-native checks, bounded independent Claude review,
+- **Tests / Review:** project-native checks, bounded independent review (Claude default),
   and completion evidence. Displaying Review never spends allowance. Unknown or
   incomplete results must not become green.
-- **Helpers:** separate read-only Codex/Cursor agents receive the current pane's
-  context. They do not silently become the lead or spend Claude review allowance.
+- **Helpers:** separate read-only Codex/Claude/Cursor agents receive the current pane's
+  context. They do not silently become the lead or spend the final-review attempt allowance.
 - **New conversation:** save handoff → commit → push → restart. Show progress and
   failures. Retry rechecks identity and resumes the failed checkpoint.
 

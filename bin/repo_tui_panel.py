@@ -453,7 +453,7 @@ class Panel:
                     (
                         "checks",
                         "✓ Tests / Review",
-                        "Project checks and bounded Claude review",
+                        "Project checks and bounded independent review",
                     ),
                     ("info", "◉ Information", "Agents, context, usage, containers"),
                     ("actions", "☷ Actions", "Workflow and helpers"),
@@ -480,7 +480,7 @@ class Panel:
                 "Checks",
                 [
                     ("tests", "Tests", "Project test results and logs"),
-                    ("review", "Review", "Independent, limited Claude review"),
+                    ("review", "Review", "Independent review; Claude default"),
                 ],
             )
         if not name:
@@ -585,7 +585,7 @@ class Panel:
                     (
                         "helper",
                         "Ask a helper about this",
-                        "Read-only Codex/Cursor with selected pane evidence",
+                        "Read-only helper with selected pane evidence",
                     ),
                     (
                         "pick",
@@ -694,7 +694,7 @@ class Panel:
         preset = self.choose(
             "Read-only helper",
             [(k, v[0], v[1]) for k, v in PRESETS.items()],
-            "No Claude usage. One helper at a time.",
+            "Uses selected account. One helper at a time.",
         )
         if not preset:
             return
@@ -703,6 +703,7 @@ class Panel:
             [
                 ("codex", "Codex", "Read-only investigator"),
                 ("cursor", "Cursor", "Read-only investigator"),
+                ("claude", "Claude", "Read-only; uses Claude subscription"),
             ],
         )
         if not agent:
@@ -772,8 +773,19 @@ class Panel:
         if d.get("state") in ("queued", "running", "preparing"):
             self.message = "Tests are already running."
             return
+        agent = "codex"
+        if not d.get("configured"):
+            agent = self.choose(
+                "Test setup agent",
+                [
+                    (x, x, "Read-only setup; uses selected account")
+                    for x in ("codex", "cursor", "claude")
+                ],
+            )
+            if not agent:
+                return
         if not self.confirm(
-            "Run project tests?", "First setup uses a Codex/Cursor child. No Claude."
+            "Run project tests?", "Setup uses the selected child; reruns need no model."
         ):
             return
         args = [
@@ -787,7 +799,7 @@ class Panel:
                 "--target",
                 self.address.rsplit("/", 1)[-1],
                 "--agent",
-                "cursor" if W.label(self.row, "agent") == "cursor" else "codex",
+                agent,
             ]
         self.busy("Queuing tests…", lambda: self.b.work(self.row, *args))
         self.last["tests"] = 0
@@ -827,22 +839,47 @@ class Panel:
         stream = W.label(self.row, "stream")
         if ch == "complete":
             return self.check_completion()
+        reviewer = d.get("reviewer", "claude")
+        if ch in ("doctor", "run"):
+            reviewer = self.choose(
+                "Independent reviewer",
+                [
+                    (
+                        x,
+                        x,
+                        "Different provider from implementation; shared two-attempt limit",
+                    )
+                    for x in ("claude", "codex", "cursor")
+                ],
+            )
+            if not reviewer:
+                return
         if ch == "doctor":
             out = self.busy(
                 "Checking setup…",
-                lambda: self.b.work(self.row, "review", stream, "--doctor", "--json"),
+                lambda: self.b.work(
+                    self.row,
+                    "review",
+                    stream,
+                    "--doctor",
+                    "--reviewer",
+                    reviewer,
+                    "--json",
+                ),
             )
             self.preview = {"path": "Review setup", "text": json.dumps(out, indent=2)}
             self.offset = 0
             return
         if ch == "run" and not self.confirm(
-            "Start bounded Claude review?",
-            f"{left} calls remain. 24 turns / 20 minutes per call.",
+            "Start bounded independent review?",
+            f"{left} calls remain. 20 minutes per call; Claude: 24 turns.",
         ):
             return
         args = ["review", stream] + (
             ["--prepare"] if ch == "prepare" else ["--follow-up"] if left == 1 else []
         )
+        if ch == "run":
+            args += ["--reviewer", reviewer]
         on = W.machine(self.address)
         job = self.busy(
             "Queuing review controller…",
@@ -1366,7 +1403,7 @@ class Panel:
                 summary
                 + "\nK: check completion · no tests / Claude\n\n"
                 + str(d.get("remaining", "?"))
-                + " / 2 Claude calls remain · R: review actions\n\n"
+                + " / 2 review attempts remain · R: review actions\n\n"
                 + text,
                 y,
                 1,

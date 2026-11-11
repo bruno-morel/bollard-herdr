@@ -182,14 +182,14 @@ class Controls(unittest.TestCase):
         self.assertEqual(p.calls[0][1], "repo-new-conversation.py")
         self.assertEqual(p.calls[0][2], ["feature", "--target", "t2d", "--confirm"])
 
-    def test_first_tests_never_launch_claude(self):
+    def test_first_tests_use_explicit_provider(self):
         p = self.panel()
         p.cache = {"tests": {"configured": False}}
+        p.choose = lambda *a: "claude"
         p.run_tests()
         args = p.calls[0][1]
         self.assertEqual(args[:3], ("tests", "first", "feature"))
-        self.assertEqual(args[-2:], ("--agent", "codex"))
-        self.assertNotIn("claude", args)
+        self.assertEqual(args[-2:], ("--agent", "claude"))
 
     def test_existing_tests_reuse_runner(self):
         p = self.panel()

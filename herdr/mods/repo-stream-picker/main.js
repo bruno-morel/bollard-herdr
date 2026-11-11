@@ -519,7 +519,7 @@ export default class StreamPicker extends View {
             cx.notify();
           }));
           if (this.advanced) {
-            setup = setup.child(select('agent', 'Agent', this.agent, ['codex', 'cursor'].map(a => option(a, a)), (value, cx) => {
+            setup = setup.child(select('agent', 'Agent', this.agent, ['codex', 'claude', 'cursor'].map(a => option(a, a)), (value, cx) => {
               this.agent = value;
               cx.notify();
             }));

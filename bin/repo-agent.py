@@ -152,7 +152,7 @@ Follow the file-review instructions for this session when asked to show the plan
                   'and the repository-specific finite validation commands with work review --prepare. '
                   'Fill docs/handoffs/' + stream + '/review-input.json using review-guide.md. '
                   'Run normal checks and exercise the actual feature first; preserve failures and fix causes. '
-                  'Then use work review for the independent final Claude review. This end-stage review is '
+                  'Then use work review for the independent final review (Claude by default; choose a different provider from the implementation agent). This end-stage review is '
                   'authorized; do not launch additional Claude agents during implementation. '
                   'Pause overlapping edits while reviewing. Use work review --status to check the verdict. '
                   'Fix findings without weakening tests or silently reducing acceptance scope. '

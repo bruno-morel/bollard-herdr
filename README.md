@@ -41,6 +41,7 @@ In a terminal, run `repo-tui`. No agent starts just because you installed a UI.
 | Task | Guide |
 | --- | --- |
 | Connect laptop, server or phone | [Setup](docs/setup.md) |
+| Install/sign in to Codex, Claude or Cursor | [Agent guide](docs/agents.md) |
 | Plan → code → test → review | [Daily workflow](docs/workflow.md) |
 | Change Bollard itself | [Development](docs/development.md) |
 | Rebuild the desktop layout | [Gallery recipe](herdr/RECIPE.md) |

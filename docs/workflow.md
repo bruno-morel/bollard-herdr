@@ -39,18 +39,18 @@ planning does not erase implementation progress.
 | Review | Independent review and completion evidence |
 
 Tests use the project's runners. Small changes should get focused checks;
-riskier changes need broader evidence. Claude reviews are bounded and explicit.
+riskier changes need broader evidence. Independent reviews are bounded and explicit; Claude is the default.
 Opening Review does not spend the allowance. Green is evidence, not a force field.
 
 Ask the agent to show a file, or pick one yourself. The conversation stays put.
-**Ask a helper about this** starts separate, read-only Codex/Cursor help with the
-pane's context. Claude is reserved for review, not every passing thought.
+**Ask a helper about this** starts separate, read-only Codex/Claude/Cursor help with the
+pane's context. Claude helpers are opt-in; the default remains Codex (or Cursor from a Cursor pane).
 
 ## First test run
 
-Use **First tests run** in the Tests panel. A read-only Codex/Cursor child inspects
+Use **First tests run** in the Tests panel. A read-only Codex/Claude/Cursor child inspects
 the project's runners and proposes checks. The controller validates and saves
-them, then starts the first run. The lead stays available. No Claude call.
+them, then starts the first run. The lead stays available. Choose the child provider explicitly; later reruns use no model.
 
 For the CLI, get the lead's terminal ID with `hc ls`, then substitute it below:
 
@@ -128,3 +128,5 @@ and Docker volumes. The button is not a time machine.
 the matching remote branch before local cleanup. A rejected push keeps the
 workspace intact; fix the cause and rerun the same command. A remote branch with
 newer work is refused. Without `--delete-remote`, the remote stays put.
+
+See the [agent guide](agents.md) for provider selection, authentication and the shared review budget.

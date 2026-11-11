@@ -10,6 +10,8 @@
 | Development host | Your chosen agent CLI, signed in; Docker + Compose for Work stacks |
 | Zellij users | Zellij, lazygit |
 
+See [Agents: install, sign in, choose](agents.md) for Codex, Claude and Cursor commands and feature support.
+
 No agent binaries or credentials are bundled. On macOS, Glow is one command:
 
 ```sh

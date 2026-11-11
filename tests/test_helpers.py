@@ -71,9 +71,9 @@ class Helpers(unittest.TestCase):
         self.assertIn("Do not modify any files", job["prompt"])
         self.assertEqual(self.command.call_count, 1)  # no worktree or Docker commands
 
-    def test_claude_is_never_used_as_a_helper(self):
-        self.args.agent = "claude"
-        with self.assertRaisesRegex(RuntimeError, "reserved for review"):
+    def test_unknown_provider_is_rejected(self):
+        self.args.agent = "unknown"
+        with self.assertRaisesRegex(RuntimeError, "Choose"):
             F.helper(self.args)
         self.command.assert_not_called()
 
@@ -110,7 +110,7 @@ class Helpers(unittest.TestCase):
         self.command.assert_not_called()
 
     def test_research_agent_launch_uses_restricted_mode_and_keeps_shell(self):
-        for agent in ("codex", "cursor"):
+        for agent in ("codex", "claude", "cursor"):
             with self.subTest(agent=agent):
                 path = self.runtime / "job.json"
                 F.write(
@@ -132,6 +132,9 @@ class Helpers(unittest.TestCase):
                     self.assertEqual(
                         argv[argv.index("--ask-for-approval") + 1], "never"
                     )
+                elif agent == "claude":
+                    self.assertEqual(argv[argv.index("--tools") + 1], "Read,Glob,Grep")
+                    self.assertIn("--strict-mcp-config", argv)
                 else:
                     self.assertEqual(argv[argv.index("--mode") + 1], "ask")
                 self.assertEqual(argv[-1], "Inspect only")
