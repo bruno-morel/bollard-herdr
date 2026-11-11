@@ -11,7 +11,7 @@
 | Boundaries | Picker, transport, terminal input, menu, display rows and refresh queries live outside workflow controllers. |
 | Workflow tests | Stream identity, checkpoint retries, completion evidence, bounded review, helper ownership and ambiguous task delivery. |
 | Git tests | Real disposable repos: merge previews, stale tokens, ignored files and conflicts. |
-| Failure tests | Installer rollback, interrupted writes, Docker ownership, stream-switch races, transfer/recovery failures, quota refresh and worktree removal. |
+| Failure tests | Installer rollback, interrupted writes, Docker ownership, stream-switch races, transfer/recovery failures, quota refresh, worktree removal and rejected remote-deletion retries. |
 | Docs | Short guides, diagrams, checked relative links, installer profiles and first-test setup. |
 
 Tests run with isolated HOME/Git settings. They never launch paid agents.
@@ -21,8 +21,6 @@ Mocks replace external boundaries, not the rules being tested.
 
 - **TUI:** document routing, render-before-ack and history have automated checks.
   Exercise the actual picker and panels, including phone-sized resizing.
-- **Cleanup:** verify `work finish` recovery after a remote deletion failure.
-  Its current order removes the local checkout before pushing the deletion.
 - **Packaging:** finish the upstream notice comparison and gallery discovery check.
 - **Final pass:** run the full checks against the final commit and verify both hosts.
 

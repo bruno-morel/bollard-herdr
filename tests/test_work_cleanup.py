@@ -51,6 +51,7 @@ esac
             "zellij": '#!/bin/sh\nprintf "zellij %s\\n" "$*" >> "$TEST_LOG"\n',
             "git": """#!/bin/sh
 case "$*" in
+  *"ls-remote --heads"*) [ "${REMOTE_FAIL:-0}" = 0 ] || exit 1 ;;
   *"status --porcelain"*) [ "${STATUS_FAIL:-0}" = 0 ] || exit 1 ;;
 esac
 exec "$REAL_GIT" "$@"
@@ -154,5 +155,60 @@ exec "$REAL_GIT" "$@"
         result = self.run_work("finish", "demo", "--delete-remtoe")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown option", result.stderr)
+        self.preserved()
+        self.assertEqual(self.calls(), "")
+
+    def remote(self):
+        self.origin = self.base / "origin.git"
+        self.git("clone", "--bare", str(self.root), str(self.origin))
+        self.git("remote", "add", "origin", str(self.origin))
+        self.git("push", "origin", "HEAD:refs/heads/main", "codex/demo")
+
+    def test_rejected_remote_delete_preserves_workspace_and_retry_succeeds(self):
+        self.remote()
+        hook = self.origin / "hooks/pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        result = self.run_work("finish", "demo", "--delete-remote")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("local workspace preserved", result.stderr)
+        self.preserved()
+        self.assertEqual(self.calls(), "")
+        hook.unlink()
+        result = self.run_work("finish", "demo", "--delete-remote")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.tree.exists())
+        self.assertFalse(self.state.exists())
+        self.assertEqual(
+            self.git("ls-remote", "--heads", "origin", "refs/heads/codex/demo"), ""
+        )
+
+    def test_absent_remote_is_successful_retry_after_local_failure(self):
+        self.remote()
+        result = self.run_work("finish", "demo", "--delete-remote", DOCKER_EXIT="7")
+        self.assertNotEqual(result.returncode, 0)
+        self.preserved()
+        self.assertEqual(
+            self.git("ls-remote", "--heads", "origin", "refs/heads/codex/demo"), ""
+        )
+        result = self.run_work("finish", "demo", "--delete-remote")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.state.exists())
+
+    def test_remote_lookup_failure_is_not_missing_branch(self):
+        self.remote()
+        result = self.run_work("finish", "demo", "--delete-remote", REMOTE_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot inspect remote branch", result.stderr)
+        self.preserved()
+        self.assertEqual(self.calls(), "")
+
+    def test_new_remote_commits_are_not_deleted(self):
+        self.remote()
+        self.git("commit", "--allow-empty", "-qm", "New remote work")
+        self.git("push", "origin", "HEAD:refs/heads/codex/demo")
+        result = self.run_work("finish", "demo", "--delete-remote")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("remote branch differs", result.stderr)
         self.preserved()
         self.assertEqual(self.calls(), "")

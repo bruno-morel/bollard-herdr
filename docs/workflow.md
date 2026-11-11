@@ -123,3 +123,8 @@ worktree, the printed path is retained for inspection—not deleted behind you.
 Detach to leave an agent running. Closing a session is different from deleting
 its worktree. Read `work --help` before removal: force removal can discard changes
 and Docker volumes. The button is not a time machine.
+
+`work finish my-feature --delete-remote` proves the feature merged, then deletes
+the matching remote branch before local cleanup. A rejected push keeps the
+workspace intact; fix the cause and rerun the same command. A remote branch with
+newer work is refused. Without `--delete-remote`, the remote stays put.

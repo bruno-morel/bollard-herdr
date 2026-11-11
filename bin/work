@@ -652,6 +652,23 @@ case "${1:-}" in
         echo "  $merge_reason"
         echo
 
+        # Resolve and delete the remote first. A rejected/uncertain push leaves
+        # the checkout and state intact so this command can be retried safely.
+        if (( delete_remote )); then
+            remote_ref="$(git --git-dir="$COMMON" ls-remote --heads origin "refs/heads/$BRANCH")" ||
+                die "cannot inspect remote branch; local workspace preserved"
+            if [[ -n "$remote_ref" ]]; then
+                remote_oid="${remote_ref%%[[:space:]]*}"
+                [[ "$remote_oid" == "$current_oid" ]] ||
+                    die "remote branch differs from this checkout; inspect it before deleting"
+                echo "Deleting remote branch origin/$BRANCH..."
+                git --git-dir="$COMMON" push \
+                    --force-with-lease="refs/heads/$BRANCH:$remote_oid" \
+                    origin ":refs/heads/$BRANCH" ||
+                    die "remote deletion failed; local workspace preserved; retry work finish $slug --delete-remote"
+            fi
+        fi
+
         (
             cd "$WORKTREE_PATH"
             [[ ! -f "$COMPOSE_FILE" && "$LEGACY_COMPOSE" == 0 ]] || docker compose down -v --remove-orphans
@@ -667,13 +684,6 @@ case "${1:-}" in
             git --git-dir="$COMMON" branch -D "$BRANCH"
         fi
 
-        if (( delete_remote )); then
-            if git --git-dir="$COMMON" ls-remote --exit-code \
-                 --heads origin "$BRANCH" >/dev/null 2>&1; then
-                echo "Deleting remote branch origin/$BRANCH..."
-                git --git-dir="$COMMON" push origin --delete "$BRANCH"
-            fi
-        fi
 
         rm -rf "$(state_dir "$slug")"
 
