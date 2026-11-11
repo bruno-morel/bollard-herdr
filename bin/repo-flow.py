@@ -185,8 +185,10 @@ def check_cancel(runtime, job):
         )
 
 
-def managed_open(root, stream, role, agent, task_file=None):
+def managed_open(root, stream, role, agent, task_file=None, profile=None):
     args = [BIN / role, "herdr", stream, "--agent", agent]
+    if profile:
+        args += ['--profile', profile]
     if task_file:
         args += ["--task-file", task_file, "--new-chat"]
     launch_command(args, cwd=root)
@@ -412,7 +414,7 @@ def perform(runtime, job):
             "This role is already using another agent. Switch it from its pane before continuing."
         )
     if action == "open":
-        target, row = managed_open(root, stream, role, job["agent"])
+        target, row = managed_open(root, stream, role, job["agent"], profile=job.get("profile"))
         os.chdir(target)
         command(
             [
@@ -516,6 +518,7 @@ def launch(args):
             args.action = "open"
             args.role = old["role"]
             args.agent = old["agent"]
+            args.profile = old.get("profile")
         if old.get("state") in ACTIVE:
             address = old.get("terminal")
             if address:
@@ -572,6 +575,7 @@ def launch(args):
             action=args.action,
             agent=agent,
             reviewer=reviewer,
+            profile=getattr(args, "profile", None),
             task=args.task or "",
             token=token,
             state="queued",
@@ -858,6 +862,7 @@ def main(argv=None):
         "--retry-token",
         help="Retry exactly this failed opening; reuse its checkout and agent",
     )
+    p.add_argument("--profile", help="Configured role profile for opening a conversation")
     p.add_argument("--agent", choices=agents.AGENTS)
     p.add_argument(
         "--reviewer",

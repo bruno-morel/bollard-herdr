@@ -128,6 +128,9 @@ class Backend:
     def prepare_and_open(
         self, on, data, source, role, agent, progress=None, retry=False
     ):
+        profile = role
+        definition = (data.get("roles") or {}).get(profile, {})
+        role = definition.get("base", role)
         progress = progress or (lambda message: None)
         progress("Checking existing conversation…")
         # Reuse live conversations before touching worktree setup or agent preferences.
@@ -146,6 +149,8 @@ class Backend:
                 raise RuntimeError(
                     "Multiple conversations match this stream. Choose one from Active."
                 )
+            if matches and (label(matches[0], "profile") or role) != profile:
+                raise RuntimeError("Another role owns this workflow slot. Use Hand off to… first.")
             if matches:
                 return {"address": self.verify(matches[0])["address"]}
         args = ["prepare", "--repo", data["primary"]]
@@ -160,7 +165,7 @@ class Backend:
         job = self.script(
             on,
             role,
-            ["flow", "open", source["stream"], "--role", role, "--agent", agent],
+            ["flow", "open", source["stream"], "--role", role, "--agent", agent, "--profile", profile],
             cwd=prepared["cwd"],
             timeout=120,
         )

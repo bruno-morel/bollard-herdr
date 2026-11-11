@@ -49,7 +49,7 @@ import {
 export default class StreamPicker extends View {
   init(_p, cx) {
     this.dropdowns = {};
-    for (const id of ['conversation', 'machine', 'repository', 'source', 'worktree', 'branch', 'agent']) this.dropdowns[id] = {
+    for (const id of ['conversation', 'machine', 'repository', 'source', 'worktree', 'branch', 'agent', 'role-profile', 'handoff-role']) this.dropdowns[id] = {
       open: false,
       at: 0,
       focus: cx.focus_handle(),
@@ -58,6 +58,7 @@ export default class StreamPicker extends View {
     };
     const p = props() || {},
       loc = p.context || selectWorkflowContext(terminals(), spaces(), panes(), focused(), p);
+    this.handoff = p.handoff ? loc : null;
     this.on = loc?.on ?? p.on ?? null;
     this.role = p.role || loc?.role || 'studio';
     this.agent = 'codex';
@@ -295,6 +296,14 @@ export default class StreamPicker extends View {
     cx.notify();
     cx.spawn(async cx => {
       try {
+        if (this.handoff) {
+          const c = this.handoff;
+          const r = await exec('repo-new-conversation.py', [c.stream, '--target', c.terminal.split('/').pop(), '--handoff-profile', this.role, '--confirm'], {cwd:c.cwd, on:c.on});
+          if (r.code) throw Error(r.stderr || r.stdout);
+          notify({title:'Role handoff', body:JSON.parse(r.stdout).message || 'Checkpoint started'});
+          closeOverlay(props().overlay);
+          return;
+        }
         if (this.active) {
           const row = running(terminals()).find(t => t.address === this.active);
           if (!row) throw Error('That conversation has ended. Choose its worktree to reopen it.');
@@ -320,12 +329,14 @@ export default class StreamPicker extends View {
           folder = s.source === 'tree' ? stream : this.checkoutName.value().trim();
         if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stream || '')) throw Error('Use lowercase words separated by hyphens for the stream.');
         if (s.source !== 'tree' && !s.ref) throw Error('Choose a base branch first. Detached checkouts cannot be resumed as a named stream.');
+        const baseRole = this.data.roles?.[this.role]?.base || this.role;
         const options = {
+          profile: this.role,
           placement: props().placement,
           repo: this.data.repo
         };
         // Reuse the selected role without changing its model or sending it another prompt.
-        if (s.source !== 'new' && await openExisting(this.data.primary, stream, this.role, this.on, props().lane, !!props().newWindow, options)) {
+        if (s.source !== 'new' && await openExisting(this.data.primary, stream, baseRole, this.on, props().lane, !!props().newWindow, options)) {
           closeOverlay(props().overlay);
           return;
         }
@@ -340,7 +351,7 @@ export default class StreamPicker extends View {
         if (prepared.code) throw Error(prepared.stderr || prepared.stdout);
         const out = JSON.parse(prepared.stdout);
         this.progress('Starting agent / Docker setup…', cx);
-        const r = await exec(this.role, ['flow', 'open', stream, '--role', this.role, '--agent', this.agent], {
+        const r = await exec(baseRole, ['flow', 'open', stream, '--role', baseRole, '--agent', this.agent, '--profile', this.role], {
           cwd: out.cwd,
           on: this.on
         });
@@ -405,6 +416,18 @@ export default class StreamPicker extends View {
       label,
       detail
     });
+    if (this.handoff) {
+      const sourceId = all.find(r => r.address === this.handoff.terminal)?.labels?.['repo-tools.profile'] || this.handoff.role;
+      const suggested = data?.roles?.[sourceId]?.handoff_to || [];
+      const choices = Object.entries(data?.roles || {}).filter(([id]) => id !== sourceId).sort(([a],[b]) => Number(suggested.includes(b))-Number(suggested.includes(a))).map(([id, r]) => option(id, r.label, r.description + ' · ' + r.base));
+      if (!choices.some(r => r.value === this.role)) this.role = choices[0]?.value || '';
+      return v_flex().p(18).gap(14).bg(t.background).text_color(t.foreground)
+        .child(div().font_semibold().child('Hand off to…'))
+        .child(caption('Save progress, commit and push this stream, then start the destination role. The current agent must be idle.'))
+        .child(select('handoff-role', 'Destination role', this.role, choices, (id, cx) => {this.role=id;cx.notify();}))
+        .when(!!this.error, e => e.child(div().text_color(t.danger || t.foreground).child(this.error)))
+        .child(this.button('handoff-submit', this.busy ? 'Starting checkpoint…' : 'Save checkpoint & hand off', cx => this.submit(cx), {strong:true}));
+    }
     let body = v_flex().id('stream-picker-scroll').flex_1().min_h(0).overflow_y_scrollbar().gap(12);
     const tabs = h_flex().gap(5).children([
       ['existing', 'Existing conversation', 'message'],
@@ -428,16 +451,11 @@ export default class StreamPicker extends View {
         .when(!!current, e => e.child(caption(current.labels['repo-tools.role'].toUpperCase() + ' · ' + (machineOf(current.address) || 'This computer'))).child(caption(current.labels['repo-tools.checkout'] || current.cwd)))
         .child(caption(all.length ? 'Your existing role, model, prompt and conversation stay together.' : 'No active conversations. Use New conversation to open a worktree or start a stream.'))));
     } else {
-      let setup = v_flex().gap(12).child(h_flex().gap(8).children([
-        ['studio', 'Studio', 'Planning & handoffs', 'book'],
-        ['work', 'Work', 'Implementation & Docker', 'bolt']
-      ].map(([id, label, detail, icon]) => this.button('role-' + id, data?.roles?.[id]?.label || label, cx => {
-        this.role = id;
-        cx.notify();
-      }, {
-        selected: this.role === id,
-        icon
-      }).flex_1().justify_center().py(10).text_size(14).tooltip(data?.roles?.[id]?.description || detail))));
+      const roleOptions = data?.roles || {studio:{label:'Studio',base:'studio'},work:{label:'Work',base:'work'}};
+      if (!roleOptions[this.role]) this.role = 'studio';
+      let setup = v_flex().gap(12).child(select('role-profile', 'Role', this.role,
+        Object.entries(roleOptions).map(([id, r])=>option(id,r.label,(r.description||'')+' · '+(r.base||id))),
+        (id,cx)=>{this.role=id;cx.notify();}));
       setup = setup.child(select('machine', 'Machine', this.on, machines().map(m => option(m.name, m.name || 'This computer')), (on, cx) => {
         if (this.on !== on) {
           const row = all.find(r => machineOf(r.address) === on);

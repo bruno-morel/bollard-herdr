@@ -91,6 +91,7 @@ export async function openExisting(cwd, stream, role, on, lane, newWindow = fals
   }
   if (matches.length > 1) throw new Error('Multiple live ' + role + ' conversations match this checkout. Select the intended conversation.');
   if (!matches.length) return false;
+  if (options.profile && (matches[0].labels?.['repo-tools.profile'] || role) !== options.profile) throw Error('Another role owns this workflow slot. Use Hand off to… to save progress before switching.');
   if (newWindow) await showInWindow(matches[0], on, lane, options);
   else showConversation(matches[0], on, lane, options);
   return true;

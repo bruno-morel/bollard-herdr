@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from repo_state import write_json
+import repo_roles as profiles
 from pathlib import Path
 import re
 import shutil
@@ -179,12 +180,17 @@ def open_stream(args):
             fail('multiple live terminals match this role/stream; inspect hc ls before continuing')
         record = read_record(pref)
         name = args.agent or api.selected(pref)
+        profile_id = getattr(args, 'profile', None) or profiles.selected(target or root, pref, role)[0]
+        profile = profiles.roles(target or root).get(profile_id)
+        if not profile or profile['base'] != role: fail('Role profile must use base '+role)
         if live:
             row = live[0]
             api.packet(target, stream)
             foreground = (row.get('foreground') or {}).get('name')
             old_agent = (row.get('labels') or {}).get('repo-tools.agent')
             old_agent = old_agent or (foreground if foreground in AGENTS else None) or record.get('agent') or name
+            if profile_id != profiles.selected(target, pref, role)[0]:
+                fail('This workflow slot has another role. Use Hand off to… to save progress and switch safely.')
             current = os.environ.get('HC_TERMINAL_ID') == row['address']
             # No injected keystrokes or restarts of a running program.
             requested = args.resume is not None or args.new_chat or args.take or args.task_file or (args.agent and args.agent != old_agent)
@@ -193,9 +199,10 @@ def open_stream(args):
             space = (row.get('labels') or {}).get('herdr.space') or 'stream-'+repo_id+'-'+stream
             tab = (row.get('labels') or {}).get('herdr.tab') or space+'-'+role
             labels = terminal_labels(role, repo_id, stream, target, old_agent, space, tab)
+            labels['repo-tools.profile'] = profile_id
             call(['hc', 'label', row['address'], *[k+'='+v for k, v in labels.items()]], stdout=sp.DEVNULL)
             call(['hc', 'keep', row['address']], stdout=sp.DEVNULL)
-            write_record(pref, dict(record, address=row['address'], agent=old_agent, started=True))
+            write_record(pref, dict(record, address=row['address'], agent=old_agent, profile=profile_id, started=True))
             if current:
                 # Invoked from this pane's shell: run in place, preserving its parent supervisor.
                 mode = 'new' if args.new_chat or args.take else 'resume'
@@ -224,6 +231,7 @@ def open_stream(args):
                         for x in ('implementation.md', 'codex-prompt.md')):
                         fail('build the implementation handoff first: studio handoff')
                     call([BIN/'work', '_herdr-start', stream], cwd=target)
+                profiles.select(target, pref, role, profile_id)
                 pref.write_text(name+'\n')
             # Reuse the space of the other role or a finished terminal, when one exists.
             related = [r for r in rows if role_of(r, repo_id, stream, repo, target) in ('studio', 'work')]
@@ -234,13 +242,14 @@ def open_stream(args):
             tabs = {(r.get('labels') or {}).get('herdr.tab') for r in matches} - {None, ''}
             tab = next(iter(tabs)) if len(tabs) == 1 else space+'-'+role
             labels = terminal_labels(role, repo_id, stream, target, name, space, tab)
+            labels['repo-tools.profile'] = profile_id
             key = hashlib.sha256((repo_id+'/'+stream).encode()).hexdigest()[:10]
             terminal_name = f'{role}-{repo[:5]}-{stream[:7]}-{key}' # <=31 ASCII chars
             pane = [sys.executable, str(BIN/'repo_herdr.py'), '_pane', role, stream, '--agent', name]
             if role == 'work':
                 # Load this stream's Compose environment inside the new terminal as well.
                 pane = [str(BIN/'work'), '_herdr-pane', stream, '--agent', name]
-            mode = 'new' if args.new_chat or args.take else 'resume' if args.resume is not None or record.get('started') else 'new'
+            mode = 'new' if args.new_chat or args.take or record.get('profile', role) != profile_id else 'resume' if args.resume is not None or record.get('started') else 'new'
             pane += ['--mode', mode]
             if args.resume:
                 pane += ['--resume-id', args.resume]
@@ -258,7 +267,7 @@ def open_stream(args):
             if row.get('state') != 'live':
                 fail('terminal ended during startup; inspect hc read '+row['address'])
             address = row['address']
-            write_record(pref, dict(record, address=address, agent=name, started=True))
+            write_record(pref, dict(record, address=address, agent=name, profile=profile_id, started=True))
     if in_place:
         return run_once(*in_place)
     show_terminal(address, role, stream, args.attach)
@@ -379,6 +388,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog=role+' herdr', description='Create, reopen, or resume a shared stream in the Herdr app.')
     p.add_argument('stream', nargs='?', help='defaults to the current codex/<stream> branch')
     p.add_argument('--agent', choices=AGENTS)
+    p.add_argument('--profile', help='Configured role profile; defaults to this slot’s saved role')
     mode = p.add_mutually_exclusive_group()
     mode.add_argument('--resume', nargs='?', const='', default=None, metavar='CHAT_ID', help='resume by ID, or open the agent\'s picker')
     mode.add_argument('--new-chat', action='store_true', help='start with fresh role/handoff context')

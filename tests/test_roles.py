@@ -61,10 +61,81 @@ class RoleTests(unittest.TestCase):
             with patch.object(
                 module, "preferences", return_value=root / "work.agent"
             ), patch.object(module, "packet", return_value=root), patch.object(
-                module, "roles", return_value=profile
+                module, "selected_role", return_value=("work", profile["work"])
             ):
                 text = module.prompt(root, "sample", "work")
             self.assertIn("Engineering", text)
             self.assertIn("Prefer existing tooling", text)
             self.assertIn("One --follow-up is allowed", text)
             self.assertIn("Use this checkout and branch", text)
+
+    def test_custom_profile_persistence_and_instructions_file(self):
+        import json
+        from repo_roles import select, selected
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conf = root / ".bollard"
+            conf.mkdir()
+            (conf / "research.md").write_text("Cite your sources.")
+            (conf / "roles.json").write_text(
+                json.dumps(
+                    {
+                        "research": {
+                            "base": "studio",
+                            "label": "Research",
+                            "instructions_file": "research.md",
+                            "handoff_to": ["work"],
+                        }
+                    }
+                )
+            )
+            with patch.dict(os.environ, XDG_CONFIG_HOME=str(root / "config")):
+                pref = root / "state/studio.agent"
+                self.assertEqual(selected(root, pref, "studio")[0], "studio")
+                select(root, pref, "studio", "research")
+                identity, profile = selected(root, pref, "studio")
+                self.assertEqual(identity, "research")
+                self.assertIn("Cite your sources.", profile["instructions"])
+                with self.assertRaises(RuntimeError):
+                    select(root, pref, "work", "research")
+                (conf / "roles.json").write_text(
+                    '{"research":{"base":"studio","instructions_file":"../secret"}}'
+                )
+                with self.assertRaises(RuntimeError):
+                    roles(root)
+
+    def test_handoff_protects_destination_and_requires_implementation(self):
+        import repo_role_handoff as H
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ, XDG_CONFIG_HOME=tmp
+        ):
+            root = Path(tmp)
+            source = {
+                "address": "t1",
+                "state": "live",
+                "labels": {"repo-tools.role": "studio", "repo-tools.stream": "sample"},
+            }
+            api = SimpleNamespace(packet=lambda *_: root)
+            with self.assertRaisesRegex(RuntimeError, "Build the implementation"):
+                H.prepare(api, root, "sample", source, "work", [source])
+            (root / "implementation.md").write_text("Implement the agreed scope")
+            target = {
+                "address": "t2",
+                "state": "live",
+                "labels": {"repo-tools.role": "work", "repo-tools.stream": "sample"},
+            }
+            with self.assertRaisesRegex(RuntimeError, "already open"):
+                H.prepare(api, root, "sample", source, "work", [source, target])
+            job = H.prepare(api, root, "sample", source, "work", [source])
+            H.validate(root, job)
+            self.assertEqual(
+                H.notes("sample", job), "docs/handoffs/sample/roles/studio.md"
+            )
+            with patch.object(
+                H.profiles, "roles", return_value={"work": {"label": "Changed"}}
+            ):
+                with self.assertRaisesRegex(RuntimeError, "configuration changed"):
+                    H.validate(root, job)

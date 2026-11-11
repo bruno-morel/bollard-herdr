@@ -86,6 +86,15 @@ export async function refreshStatuses(lanes) {
         ...seen,
         [eventKey]: state.event_id
       });
+      if (i === 1 && job.state === 'started' && job.handoff && job.destination_terminal) {
+        const pins = shared('repo.portrait.lanes') || {};
+        const terminal = context.on && !job.destination_terminal.startsWith(context.on + '/') ? context.on + '/' + job.destination_terminal : job.destination_terminal;
+        for (const [lane, pin] of Object.entries(pins)) {
+          if (pin.on === context.on && pin.cwd === context.cwd && pin.terminal?.split('/').pop() === job.target.split('/').pop())
+            pins[lane] = {...pin, role:job.handoff.base, terminal};
+        }
+        setShared('repo.portrait.lanes', pins);
+      }
       const action = i === 1 && state.can_retry ? {
         name: 'repo-portrait.retry-checkpoint:' + encodeURIComponent(JSON.stringify({
           ...context,

@@ -1,52 +1,92 @@
-# Customizing roles
+# Custom roles and handoffs
 
-In **New conversation**, choose the large Studio / Work role button before
-opening a worktree or creating a stream. In the TUI, select the first **Role**
-row. Existing conversation selection preserves its role and history. A stream
-can host both roles; choosing a role for a new conversation does not convert or
-interrupt the existing one.
+Roles are small prompt profiles, selected in the same **New conversation → Role**
+picker in desktop and TUI. Studio and Work remain available without configuration.
+An existing conversation keeps its role and history when reopened.
 
-Customize the two roles in `.bollard/roles.json` at the checkout root. Commit
-that file to share it with users and forks. For machine-wide defaults, use
-`~/.config/bollard/roles.json` (or `$XDG_CONFIG_HOME/bollard/roles.json`) on the
-**agent host**. Repository fields override machine defaults. Omitted fields keep
-their defaults. New worktrees inherit committed configuration from their base.
+Create `.bollard/roles.json` in your repository and commit it to share your roles:
 
 ```json
 {
-  "studio": {
-    "label": "Product & marketing",
-    "description": "Research, messaging and planning",
-    "instructions": "Use evidence-backed recommendations. Record assumptions and open questions in the handoff."
+  "research": {
+    "base": "studio",
+    "label": "Research",
+    "description": "Investigate options and document evidence",
+    "instructions": "Cite sources and separate findings from assumptions.",
+    "handoff_to": ["engineering"]
   },
-  "work": {
+  "engineering": {
+    "base": "work",
     "label": "Engineering",
-    "description": "Implementation, focused tests and review",
-    "instructions": "Prefer the project's existing tooling and conventions."
+    "description": "Implement the agreed scope",
+    "instructions_file": "roles/engineering.md",
+    "handoff_to": ["research"]
   }
 }
 ```
 
-The desktop and TUI creation pickers read these labels and descriptions from the
-selected repository on its host. Startup prompts include the label and extra
-instructions. Changes apply to newly launched prompts, not messages already sent
-to a running agent. Existing session/status identifiers remain `studio` and `work`.
+In this example, create `.bollard/roles/engineering.md` with your engineering
+instructions. `instructions_file` is optional and relative to the configuration
+file's directory. It cannot escape that directory. Inline `instructions` also
+work alone. `handoff_to` optionally puts suggested destination roles first; it
+does not prevent other destinations.
 
-These are **customizable profiles of two stable lifecycle roles**, not arbitrary
-new execution modes. Studio retains planning boundaries; Work retains handoff,
-Docker, risk, completion and independent-review behavior. Extra instructions are
-additive and must not remove these rules. Claude's review allowance is unchanged.
-Adding a third lifecycle role requires implementation and tests across launch,
-recovery, ownership, checkpoint and review code; adding a JSON key is rejected.
+Machine defaults go in `~/.config/bollard/roles.json` (or
+`$XDG_CONFIG_HOME/bollard/roles.json`) **on the agent host**. Repository fields
+override machine defaults. New worktrees inherit committed configuration from
+their starting branch, so commit repository roles before creating new streams.
+You can also customize the labels, descriptions and instructions of `studio`
+and `work` directly. Keep IDs stable; removing a selected role produces an
+explicit configuration error rather than silently changing the agent's role.
 
-Labels are at most 40 characters, descriptions 160, instructions 8,000. Invalid
-configuration reports its path rather than silently launching with defaults.
+## Hand off to another role
+
+1. Let the current agent finish its task. For an implementation destination,
+   build the implementation handoff first with **Studio handoff**.
+2. In desktop or TUI, choose **Actions → Hand off to…** and the destination role.
+3. Confirm saving the checkpoint. The current agent saves progress and next
+   steps, commits intended changes and pushes the stream branch. The controller
+   verifies the saved checkpoint before starting the destination role.
+4. The same stream stays selected. The destination gets a fresh conversation
+   with the shared handoff and its own role instructions.
+
+Progress and errors use the existing checkpoint display and notifications.
+A failed save/commit/push keeps the current conversation. Retry preserves verified
+steps. An uncertain launch acknowledgement is never automatically replayed:
+inspect the destination before trying again, to avoid duplicate conversations.
+
+Shared context lives in `docs/handoffs/<stream>/context.md`; role notes live in
+`docs/handoffs/<stream>/roles/<role-id>.md`. Handoff verifies the outgoing role's
+saved note too. Agents preserve other roles' notes. Conversation history is not
+transferred between providers or roles; the saved documents provide continuity.
+You can hand off back and forth without replacing the checkout or resetting Git.
+
+## What stays lightweight and protected
+
+Each profile has one base: `studio` for planning or `work` for implementation.
+Profiles add instructions to the existing workflow rather than creating another
+execution engine. There remains one lead conversation per base slot per stream.
+A handoff refuses to replace an already-open destination slot. Use scoped helpers
+for parallel tasks instead of opening competing lead agents.
+
+Work profiles retain Docker setup, risk-based tests, completion checks and the
+independent-review rules. Studio profiles retain planning boundaries. A handoff
+itself starts no tests, review or helper and does not reset the two-attempt review
+allowance. It keeps the selected provider. Role instructions are guidance, not
+an operating-system permission boundary.
+
+Existing streams need no migration: missing profile preferences mean Studio or
+Work, just as before. Runtime preferences stay outside Git. Configuration changes
+apply on the next fresh startup, not to an already-running agent. A handoff
+refuses a destination whose configuration changed during checkpointing.
+
+IDs use lowercase letters, numbers and hyphens (start with a letter, max 48).
+Labels allow 40 characters, descriptions 160, combined instructions 8,000; each
+configuration file allows 32 roles. Invalid configuration reports its path.
 
 ## Removed a stream but its name is still taken?
 
-Removing a conversation or checkout can preserve its Git branch. Active
-conversations and existing worktrees will not show a branch without a checkout.
-Choose **New conversation → Start from → Existing branch**, select the preserved
-`codex/<stream>` branch, and choose the desired role/provider. Recovery restores
-committed files without resetting the branch. Deleted uncommitted files cannot
-be recovered from the branch. Do not delete the branch just to reuse the name.
+Removing a conversation or checkout can preserve its Git branch. Choose
+**New conversation → Existing branch**, select `codex/<stream>`, then the role
+and provider. Recovery preserves committed files; it cannot recover deleted,
+uncommitted files. Do not delete the branch just to reuse the name.

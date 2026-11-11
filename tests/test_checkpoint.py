@@ -252,3 +252,57 @@ class Checkpoint(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoleCheckpointTests(unittest.TestCase):
+    def test_restart_menu_accepts_explicit_and_legacy_wording(self):
+        self.assertTrue(N.menu_ready("n / new: START NEW conversation\nChoice: "))
+        self.assertTrue(N.menu_ready("n: new chat\nChoice: "))
+        self.assertFalse(N.menu_ready("Waiting for input"))
+
+    def test_uncertain_handoff_is_never_dispatched_twice(self):
+        with patch.object(N, "hc") as hc:
+            with self.assertRaisesRegex(RuntimeError, "already requested"):
+                N.finish_checkpoint(
+                    Path("/unused"),
+                    "sample",
+                    Path("/unused"),
+                    {"handoff": {"id": "research"}, "handoff_dispatched": True},
+                )
+            hc.assert_not_called()
+
+    def test_same_slot_switch_is_saved_before_starting_new_chat(self):
+        import repo_herdr as H
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job = {
+                "target": "t1",
+                "handoff": {
+                    "id": "research",
+                    "base": "studio",
+                    "source_base": "studio",
+                },
+            }
+            api = SimpleNamespace(preferences=lambda *_: root / "studio.agent")
+            with patch.object(H, "agent_api", return_value=api), patch.object(
+                H, "local_terminals", return_value=[]
+            ), patch.object(N.handoffs, "validate"), patch.object(
+                N.handoffs, "prepare"
+            ), patch.object(
+                N.profiles, "select"
+            ) as select, patch.object(
+                N, "hc"
+            ) as hc:
+                N.finish_checkpoint(root, "sample", root, job, at_menu=True)
+                select.assert_called_once_with(
+                    root, root / "studio.agent", "studio", "research"
+                )
+                hc.assert_any_call("send", "t1", "n")
+                self.assertTrue(
+                    json.loads((root / "new-chat.json").read_text())[
+                        "handoff_dispatched"
+                    ]
+                )
+                self.assertEqual(job["destination_terminal"], "t1")

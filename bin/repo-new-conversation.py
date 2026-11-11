@@ -7,6 +7,8 @@ BIN = Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 from repo_process import agent_running
 import repo_operations as O
+import repo_role_handoff as handoffs
+import repo_roles as profiles
 
 spec = importlib.util.spec_from_file_location("review", BIN / "repo-review.py")
 R = importlib.util.module_from_spec(spec)
@@ -112,6 +114,14 @@ def verify_saved(root, stream, job):
     if not path.is_file() or job["token"] not in path.read_text():
         raise RuntimeError("The current checkpoint is missing from context.md")
     R.git(root, "ls-files", "--error-unmatch", "--", rel)
+    if job.get("handoff"):
+        note = handoffs.notes(stream, job["handoff"])
+        saved = R.safe(root, note)
+        if not saved.is_file() or job["token"] not in saved.read_text():
+            raise RuntimeError(
+                "Save the outgoing role progress note with this checkpoint token first"
+            )
+        R.git(root, "ls-files", "--error-unmatch", "--", note)
     destination = push_destination(root, stream)
     if destination != job["destination"]:
         raise RuntimeError("Push destination changed; restart refused")
@@ -164,7 +174,11 @@ def checkpoint_prompt(stream, job):
     )
     dest = job["destination"]
     resume = job.get("resume_from", "saving")
-    return f"""The user selected Save checkpoint and start a new conversation in this SAME stream.
+    extra = ""
+    if job.get("handoff"):
+        extra = f"Before committing, save your role progress in {handoffs.notes(stream, job['handoff'])}, including Checkpoint: {job['token']}. Keep shared context current and preserve all other role notes. The destination role is {job['handoff']['id']}; record next steps for it. The controller will open that role after verification, not continue this role."
+    return f"""{extra}
+The user selected Save checkpoint and start a new conversation in this SAME stream.
 Resume from {resume}. This is attempt {job.get('attempt',1)} of the SAME checkpoint token. Inspect actual files first. Preserve the saved context if it still accurately captures progress. Do NOT repeat a successful commit or push: if the checkout/context is already committed, skip committing; if the exact current commit is already on the designated remote, skip pushing. If new changes invalidate that saved work, save only what is missing. Report only the stages you actually enter.
 Do this bounded handoff now; do not continue implementation or start tests/review/helpers.
 Before step 1 run: {report} saving
@@ -174,7 +188,7 @@ If any step fails, run: {report} failed --detail "brief blocker (no secrets)" an
 1. Update docs/handoffs/{stream}/context.md with the actual current request, completed progress, decisions, unfinished work, next concrete steps, known failures, exact existing validation results/limitations, useful paths and how to resume. Preserve prior important context. Include the line Checkpoint: {job['token']}. Update implementation-plan.md if needed; do not overwrite handoff source documents or invent history.
 2. Inspect Git status, staged changes and diffs. Commit all intentional source/docs/test changes for this stream, including unfinished work as an honest WIP checkpoint. Preserve existing staged work. Do not discard, stash, amend, reset, force-add ignored assets, add secrets, or commit unrelated/uncertain files. If ownership or sensitive content is unclear, explain the blocker and stop with the conversation open. Durable artifacts belong in tracked docs/assets; scratch and local runtime are NOT backed up by this checkpoint. Record any needed ignored artifacts as a limitation and ask if they must be preserved elsewhere.
 3. Push ONLY the stream branch to remote {dest['remote']}, ref {dest['ref']}. You are explicitly authorized to commit and push this checkpoint. Never push to main, force-push, bypass hooks, merge/rebase, change remotes, deploy, reset Claude budgets or claim completion/review approval. If the push or hooks fail, report the error and stop; do not broaden the task to fix everything.
-4. Run {command} as your LAST operation. It independently verifies clean tracked/untracked state, the saved context and the actual remote commit. If it fails, explain why and stop; no automatic test reruns. On success, end your turn and wait. The controller will exit this chat normally and start a fresh one with the same role and handoff. Do not exit or start the new conversation yourself.
+4. Run {command} as your LAST operation. It independently verifies clean tracked/untracked state, the saved context and the actual remote commit. If it fails, explain why and stop; no automatic test reruns. On success, end your turn and wait. The controller will exit this chat normally and start a fresh one with the selected role and shared handoff. Do not exit or start the new conversation yourself.
 """
 
 
@@ -220,7 +234,11 @@ def report_progress(a, ctx, flow):
     print(json.dumps(dict(message="Checkpoint progress reported", stage=a.stage)))
 
 
-def restart(target):
+def menu_ready(text):
+    return "Choice:" in text and ("n: new chat" in text or "n / new: START NEW" in text)
+
+
+def restart(target, start=True):
     sent = hc("send", target, "/exit", "--if", "idle")
     if sent.get("started") is False:
         raise RuntimeError("Agent was no longer idle; restart stopped")
@@ -235,16 +253,69 @@ def restart(target):
             r = sp.run(
                 ["hc", "read", target], capture_output=True, text=True, timeout=10
             )
-            if (
-                r.returncode == 0
-                and "n: new chat" in r.stdout[-2000:]
-                and "Choice:" in r.stdout[-2000:]
-            ):
-                hc("send", target, "n")
+            if r.returncode == 0 and menu_ready(r.stdout[-2000:]):
+                if start:
+                    hc("send", target, "n")
                 return
     raise RuntimeError(
         "Checkpoint saved, but New chat menu was not confirmed. Exit normally and choose n; no automatic retry"
     )
+
+
+def finish_checkpoint(root, stream, flow, job, at_menu=False):
+    handoff = job.get("handoff")
+    if not handoff:
+        if at_menu:
+            hc("send", job["target"], "n")
+        else:
+            restart(job["target"])
+        return
+    if job.get("handoff_dispatched"):
+        raise RuntimeError(
+            "Handoff launch was already requested. Inspect the destination conversation; it will not be launched twice."
+        )
+    handoffs.validate(root, handoff)
+    import repo_herdr as H
+
+    api = H.agent_api()
+    # Check destination ownership again after the checkpoint, before exiting anything.
+    source = hc("get", job["target"])
+    handoffs.prepare(api, root, stream, source, handoff["id"], H.local_terminals(root))
+    if not at_menu:
+        restart(job["target"], start=False)
+    # Persist dispatch before the side effect: uncertain acknowledgements must not replay.
+    job["handoff_dispatched"] = True
+    R.write(flow / "new-chat.json", job)
+    if handoff["base"] == handoff["source_base"]:
+        pref = api.preferences(root, stream, handoff["base"])
+        profiles.select(root, pref, handoff["base"], handoff["id"])
+        hc("send", job["target"], "n")
+        job["destination_terminal"] = job["target"]
+    else:
+        sp.run(
+            [
+                sys.executable,
+                str(BIN / "repo_herdr.py"),
+                handoff["base"],
+                stream,
+                "--profile",
+                handoff["id"],
+                "--agent",
+                handoff["agent"],
+                "--new-chat",
+            ],
+            cwd=root,
+            check=True,
+        )
+        rows = H.local_terminals(root)
+        matches = [
+            r
+            for r in rows
+            if r.get("state") == "live"
+            and (r.get("labels") or {}).get("repo-tools.profile") == handoff["id"]
+        ]
+        if len(matches) == 1:
+            job["destination_terminal"] = matches[0]["address"]
 
 
 def receipt(a, ctx, flow):
@@ -319,15 +390,11 @@ def retry_job(a, ctx, flow):
             r = sp.run(
                 ["hc", "read", a.target], capture_output=True, text=True, timeout=10
             )
-            if (
-                r.returncode
-                or "n: new chat" not in r.stdout[-2000:]
-                or "Choice:" not in r.stdout[-2000:]
-            ):
+            if r.returncode or not menu_ready(r.stdout[-2000:]):
                 raise RuntimeError(
                     "New chat menu is not available; inspect the terminal before retrying"
                 )
-            hc("send", a.target, "n")
+            finish_checkpoint(root, stream, flow, job, at_menu=True)
             state(
                 flow,
                 job,
@@ -416,7 +483,7 @@ def worker(a, ctx, flow):
                     "restarting",
                     "Checkpoint verified. Opening fresh conversation…",
                 )
-                restart(job["target"])
+                finish_checkpoint(root, stream, flow, job)
                 state(
                     flow,
                     job,
@@ -478,7 +545,7 @@ def worker(a, ctx, flow):
                         "restarting",
                         "Checkpoint verified. Opening fresh conversation in the same stream…",
                     )
-                    restart(job["target"])
+                    finish_checkpoint(root, stream, flow, job)
                     state(
                         flow,
                         job,
@@ -517,6 +584,9 @@ def main():
     p.add_argument("--target")
     p.add_argument("--confirm", action="store_true")
     p.add_argument("--status", action="store_true")
+    p.add_argument(
+        "--handoff-profile", help="Checkpoint then hand off to a configured role"
+    )
     p.add_argument("--checkpoint-ready")
     p.add_argument("--worker")
     p.add_argument("--progress-token")
@@ -546,6 +616,18 @@ def main():
         with R.lock(flow / "launch.lock"), R.lock(review / "launch.lock"):
             guard(flow, review)
             labels = validate(hc("get", a.target), root, stream, key)
+            handoff = None
+            if a.handoff_profile:
+                import repo_herdr as H
+
+                handoff = handoffs.prepare(
+                    H.agent_api(),
+                    root,
+                    stream,
+                    hc("get", a.target),
+                    a.handoff_profile,
+                    H.local_terminals(root),
+                )
             destination = push_destination(root, stream)
             if not a.confirm:
                 print(
@@ -566,6 +648,7 @@ def main():
                 token=uuid.uuid4().hex[:16],
                 target=a.target,
                 destination=destination,
+                handoff=handoff,
                 stream=stream,
             )
             state(

@@ -639,6 +639,10 @@ export default class Portrait extends View {
         }, {
           icon: 'message'
         })))
+        .when(!!lead, e => e.child(control('handoff-role', 'Hand off to…', () => {
+          closeOverlay(p.overlay);
+          openOverlay({mod:'repo-stream-picker',kind:'dialog',width:560,height:340,props:{handoff:true,lane,context:{...c,terminal:lead.address}}});
+        }, {icon:'message'})))
         .child(item('open-studio', 'Open Studio conversation', 'open', 'studio'))
         .child(item('open-work', 'Open Work conversation', 'open', 'work'))
         .child(item('prepare', 'Prepare implementation', 'prepare', 'work'))

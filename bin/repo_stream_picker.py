@@ -191,6 +191,8 @@ class Picker:
         advanced = False
         while True:
             profiles = self.data.get("roles") or ROLE_DEFAULTS
+            if role not in profiles:
+                role = "studio"
             self.ui.context = (self.on or "This computer") + " / " + self.data["repo"]
             isnew = source["source"] == "new"
             istree = source["source"] == "tree"
@@ -290,19 +292,8 @@ class Picker:
             if action == "role":
                 choice = self.ui.choose(
                     "Role",
-                    [
-                        (
-                            "studio",
-                            "◉ " + profiles["studio"]["label"],
-                            profiles["studio"]["description"],
-                        ),
-                        (
-                            "work",
-                            "◆ " + profiles["work"]["label"],
-                            profiles["work"]["description"],
-                        ),
-                    ],
-                    selected=0 if role == "studio" else 1,
+                    [(key, "◉ " + item["label"], item["description"] + " · " + item.get("base", key)) for key, item in profiles.items()],
+                    selected=list(profiles).index(role),
                 )
                 if choice:
                     role = choice

@@ -128,6 +128,24 @@ class Panel:
                     stamp = op.get("event_id")
                     if op.get("notification") and stamp != self.checkpoint_notice:
                         self.checkpoint_notice = stamp
+                        if (
+                            job.get("state") == "started"
+                            and job.get("handoff")
+                            and job.get("destination_terminal")
+                        ):
+                            dest = job["destination_terminal"]
+                            on = W.machine(self.address)
+                            if on and not dest.startswith(on + "/"):
+                                dest = on + "/" + dest
+                            row = dict(
+                                self.row,
+                                address=dest,
+                                labels=dict(self.row.get("labels") or {}),
+                            )
+                            row["labels"]["repo-tools.role"] = job["handoff"]["base"]
+                            row["labels"]["repo-tools.profile"] = job["handoff"]["id"]
+                            save(runtime() / (self.lane + ".json"), row)
+                            control(self.lane, reattach=True)
                         self.message = job.get("message", "")
                         try:
                             curses.beep()
@@ -573,6 +591,11 @@ class Panel:
                         "Save handoff, commit/push checkpoint, then fresh chat",
                     ),
                     (
+                        "handoff-role",
+                        "Hand off to…",
+                        "Checkpoint and switch role on this stream",
+                    ),
+                    (
                         "checkpoint",
                         "Checkpoint progress",
                         "Saving context → commit → push → verify → restart",
@@ -609,6 +632,8 @@ class Panel:
                 )
             elif ch == "new-chat":
                 self.new_conversation()
+            elif ch == "handoff-role":
+                self.handoff_role()
             elif ch == "helper":
                 self.helper()
             elif ch == "pick":
@@ -616,11 +641,38 @@ class Panel:
             return
         self.switch(name)
 
-    def new_conversation(self):
+    def handoff_role(self):
+        data = self.busy(
+            "Loading roles…",
+            lambda: self.b.catalog(
+                W.machine(self.address), W.label(self.row, "checkout")
+            ),
+        )
+        source = W.label(self.row, "profile") or W.label(self.row, "role")
+        suggested = data["roles"].get(source, {}).get("handoff_to", [])
+        choices = sorted(
+            data["roles"].items(), key=lambda item: item[0] not in suggested
+        )
+        identity = self.choose(
+            "Hand off to…",
+            [
+                (key, role["label"], role.get("description", "") + " · " + role["base"])
+                for key, role in choices
+                if key != source
+            ],
+        )
+        if identity:
+            self.new_conversation(identity)
+
+    def new_conversation(self, profile=None):
         if not self.row:
             return
         if not self.confirm(
-            "Fresh conversation, same stream?",
+            (
+                "Hand off to " + profile + "?"
+                if profile
+                else "Fresh conversation, same stream?"
+            ),
             "Ask the agent to save context, commit intended changes and push this stream branch. Restart only after verification; no tests or review.",
         ):
             return
@@ -634,7 +686,8 @@ class Panel:
                     "--target",
                     self.address.rsplit("/", 1)[-1],
                     "--confirm",
-                ],
+                ]
+                + (["--handoff-profile", profile] if profile else []),
             ),
         )
         self.message = result["message"]

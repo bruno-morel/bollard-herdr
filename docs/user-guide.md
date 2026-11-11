@@ -2,7 +2,7 @@
 
 Keep your conversation open; bring in a tool when you need it. This guide covers
 the **studio-work-portrait** desktop layout and the companion terminal interface.
-Names below are the default labels; [role profiles](roles.md) can rename Studio
+Names below are the default labels; [role profiles](roles.md) can extend or rename Studio
 and Work. On narrow windows some controls show only icons—hover for their labels.
 
 ## Find what you need
@@ -234,6 +234,7 @@ permission to merge or publish automatically.
 
 | Action | What happens |
 | --- | --- |
+| Hand off to… | Pick a custom or built-in role, save and verify the checkpoint, then start that role on the same stream. [Configuration and safeguards](roles.md). |
 | New conversation · same stream | Ask the current agent to save context, commit and push the checkpoint, then restart the conversation. This **does write commits and push**. |
 | Open Studio conversation | Open/reuse the planning role for this stream. |
 | Open Work conversation | Open/reuse the implementation role, including its Work setup. |

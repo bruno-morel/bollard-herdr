@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-from repo_roles import roles
+from repo_roles import roles, selected as selected_role
 from repo_risk_policy import POLICY as RISK_POLICY
 import fcntl
 import hashlib
@@ -148,7 +148,7 @@ Follow the file-review instructions for this session when asked to show the plan
         'the actual code, follow acceptance criteria, and run relevant validation. '
         'If scope or acceptance criteria are missing, clarify before implementing.'
     )
-    profile = roles(root)[role]
+    profile_id, profile = selected_role(root, preferences(root, stream, role), role)
     if profile['instructions']:
         rules += '\n\nAdditional role guidance (preserve the workflow rules below):\n' + profile['instructions']
     if role == 'work':
@@ -165,6 +165,7 @@ Follow the file-review instructions for this session when asked to show the plan
                   'Only Verified for this version is review approval. It does not authorize a merge or push. '
                   'Reports live in the handoff reviews/ directory; raw evidence belongs in ignored scratch/.')
         rules += "\n\n" + RISK_POLICY
+    rules += f'\n\nROLE PROFILE: {profile_id}. Read docs/handoffs/{stream}/roles/{profile_id}.md if present. Maintain your own role progress there; preserve other role notes and keep shared context.md current.'
     handoff = (
         str(implementation.relative_to(root))
         if implementation.is_file() else '(not built)'
@@ -384,7 +385,7 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                     args += [resume, text]
                 print('Select the saved ' + role.upper() + ' conversation for ' + stream + '.', flush=True)
             if once and os.environ.get('HC_TERMINAL_ID') and shutil.which('hc'):
-                sp.run(['hc', 'label', os.environ['HC_TERMINAL_ID'], 'repo-tools.agent='+name],
+                sp.run(['hc', 'label', os.environ['HC_TERMINAL_ID'], 'repo-tools.agent='+name, 'repo-tools.profile='+selected_role(root, f, role)[0]],
                        stdout=sp.DEVNULL, stderr=sp.DEVNULL)
             print('Starting ' + name + ' in ' + role.upper() + ' role.', flush=True)
             try:
