@@ -24,9 +24,12 @@ flowchart TB
 ## Check a change
 
 ```sh
-brew install glow                 # rendering tests use the real renderer
+brew install glow node@22         # test tools, not runtime dependencies
+export PATH="$(brew --prefix node@22)/bin:$PATH"
+python3 desktop_build.py          # regenerate packaged helpers
 python3 tests/run.py
 python3 tests/check_sources.py
+node --test tests/js/*.test.mjs
 herdr-app check herdr/mods/repo-portrait  # if this mod changed
 ```
 
@@ -35,6 +38,23 @@ settings and temporary repositories. Agent calls are mocked. It must not borrow
 installed workflow scripts, contact paid agents, or push product branches.
 Native Herdr checks test loading/rendering; deferred UI actions still need
 interaction checks. One green command doesn't cover the whole application.
+
+## Shared desktop code
+
+Herdr loads each mod in isolation. Edit `desktop/shared/`, then generate the
+self-contained copies; don't fix the same bug in five folders.
+
+```mermaid
+flowchart LR
+  S[desktop/shared · edit here] --> B[desktop_build.py]
+  M[desktop/shared.json · destinations] --> B
+  B --> P[herdr/mods · generated copies]
+  P --> I[Installer + gallery]
+```
+
+The installer and CI reject stale copies. Node tests exercise file browsing,
+stream selection and layout changes without starting an agent. Node is only
+needed for development.
 
 ## Install and share
 

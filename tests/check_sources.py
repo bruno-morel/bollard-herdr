@@ -5,8 +5,10 @@ from pathlib import Path
 import re
 import shutil
 import subprocess as sp
+import sys
 
 root = Path(__file__).resolve().parents[1]
+sp.run([sys.executable, str(root / 'desktop_build.py'), '--check'], check=True)
 count = 0
 private = [
     rb'-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----',
@@ -15,7 +17,7 @@ private = [
     rb'/Users/[a-zA-Z][^/\s"\']*/',
     rb'192\.168\.\d+\.\d+',
 ]
-for folder in ('bin', 'herdr', 'tui', 'zellij', 'shell'):
+for folder in ('bin', 'desktop', 'herdr', 'tui', 'zellij', 'shell'):
     for path in (root / folder).rglob('*'):
         if not path.is_file():
             continue

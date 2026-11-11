@@ -1,0 +1,23 @@
+import { selectLocation } from './routing-core.js';
+export { selectLocation } from './routing-core.js';
+
+// Dialogs target the clicked space/machine, never a different focused repository.
+export function selectWorkflowContext(all, spaceList, paneList, focus, options={}) {
+  const requested=options.space===undefined?null:spaceList.find(s=>s.id===options.space);
+  let space=requested||spaceList.find(s=>s.active), f=focus;
+  if(requested) {
+    const inSpace=paneList.filter(p=>requested.tabs.some(t=>t.id===p.tab));
+    const pane=inSpace.find(p=>p.pane===focus?.pane)
+      ||inSpace.find(p=>requested.tabs.some(t=>t.active&&t.id===p.tab)&&p.terminal)
+      ||inSpace.find(p=>p.terminal);
+    f=pane?{pane:pane.pane,terminal:pane.terminal,cwd:pane.cwd}:{};
+  }
+  const loc=selectLocation(all,spaceList.map(s=>({...s,active:s===space})),paneList,f);
+  const on=options.on!==undefined?options.on:loc?.on??requested?.machine??null;
+  if(!loc||on!==loc.on||(options.space!==undefined&&!requested))return {on,cwd:'',stream:''};
+  const pane=paneList.find(p=>p.pane===f?.pane)
+    ||paneList.find(p=>space?.tabs.some(t=>t.active&&t.id===p.tab)&&p.terminal);
+  const terminal=all.find(t=>t.address===(f?.shown||f?.terminal||pane?.terminal));
+  const branch=pane?.branch||space?.branch||'';
+  return {...loc,on,stream:terminal?.labels?.['repo-tools.stream']||(branch.startsWith('codex/')?branch.slice(6):'')};
+}

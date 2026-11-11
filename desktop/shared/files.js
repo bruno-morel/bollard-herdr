@@ -1,0 +1,52 @@
+// NUL-separated Git output preserves spaces, quotes, and newlines in file names.
+export function parseFiles(status, tracked) {
+  const changed = new Map();
+  for (const record of status.split('\0').filter(Boolean)) {
+    const xy = record.slice(0,2), path = record.slice(3);
+    if (!path || path.endsWith('/')) continue;
+    const conflict = xy.includes('U') || xy === 'AA' || xy === 'DD';
+    const deleted = !conflict && (xy[1] === 'D' || xy === 'D ');
+    const label = conflict ? 'Conflict' : deleted ? 'Deleted' : xy === '??' ? 'New' : xy.includes('A') ? 'Added' : 'Modified';
+    changed.set(path, { path, label, deleted });
+  }
+  const paths = new Set([...tracked.split('\0').filter(Boolean), ...changed.keys()]);
+  const all = [...paths].sort().map(path => changed.get(path) ?? { path, label: '', deleted: false });
+  return { all, changed: all.filter(f => changed.has(f.path)) };
+}
+export function fileChoices(snapshot, forceAll, query = '') {
+  const modified = !forceAll && snapshot.changed.length > 0;
+  const source = modified ? snapshot.changed : snapshot.all;
+  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return { modified, total: source.length, rows: source.filter(f => words.every(w => f.path.toLowerCase().includes(w))) };
+}
+
+// Tree rows are derived from the same filtered, changed-first file set as List.
+export function browseRows(files,mode='tree',expanded=new Set(),query=''){
+ if(mode==='list')return files.map(f=>({...f,id:'file:'+f.path,kind:'file',depth:0,name:f.path}));
+ const root={children:new Map(),files:[],count:0,id:'root'};
+ for(const f of files){
+  const parts=f.path.split('/'),name=parts.pop();
+  const dirs=mode==='type'?[name.includes('.')?'.'+name.split('.').pop().toLowerCase():'No extension']:parts;
+  let node=root,path='';node.count++;
+  for(const dir of dirs){path=path?path+'/'+dir:dir;
+   if(!node.children.has(dir))node.children.set(dir,{name:dir,id:mode+':'+path,path,children:new Map(),files:[],count:0});
+   node=node.children.get(dir);node.count++;
+  }
+  node.files.push({...f,id:'file:'+f.path,kind:'file',name:mode==='type'?f.path:name});
+ }
+ const rows=[];
+ function visit(node,depth){
+  for(const child of [...node.children.values()].sort((a,b)=>a.name.localeCompare(b.name))){
+   const open=Boolean(query.trim())||expanded.has(child.id);
+   rows.push({id:child.id,kind:'directory',name:child.name,path:child.path,count:child.count,open,depth});
+   if(open)visit(child,depth+1);
+  }
+  for(const f of node.files.sort((a,b)=>a.name.localeCompare(b.name)))rows.push({...f,depth});
+ }
+ visit(root,0);return rows;
+}
+export function ancestors(path,mode='tree'){
+ if(mode==='list'||!path)return [];
+ if(mode==='type'){const n=path.split('/').pop();return ['type:'+(n.includes('.')?'.'+n.split('.').pop().toLowerCase():'No extension')];}
+ const parts=path.split('/');parts.pop();return parts.map((_,i)=>'tree:'+parts.slice(0,i+1).join('/'));
+}

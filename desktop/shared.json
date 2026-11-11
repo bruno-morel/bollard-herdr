@@ -1,0 +1,56 @@
+{
+  "ui.js": [
+    "repo-helper/ui.js",
+    "repo-portrait-changes/ui.js",
+    "repo-portrait-reader/ui.js",
+    "repo-portrait-review/ui.js",
+    "repo-sync/ui.js"
+  ],
+  "helper.js": [
+    "repo-portrait/helper.js",
+    "repo-portrait-changes/helper.js",
+    "repo-portrait-reader/helper.js",
+    "repo-portrait-review/helper.js"
+  ],
+  "navigation.js": [
+    "repo-portrait/navigation.js",
+    "repo-stream-picker/navigation.js"
+  ],
+  "operations.js": [
+    "repo-portrait/operations.js",
+    "repo-stream-picker/operations.js"
+  ],
+  "scope.js": [
+    "repo-portrait/scope.js",
+    "repo-portrait-changes/scope.js",
+    "repo-portrait-reader/scope.js",
+    "repo-portrait-review/scope.js"
+  ],
+  "signals.js": [
+    "repo-portrait/signals.js",
+    "repo-portrait-changes/signals.js",
+    "repo-portrait-reader/signals.js",
+    "repo-portrait-review/signals.js"
+  ],
+  "stream-tree.js": [
+    "repo-portrait/stream-tree.js",
+    "repo-stream-picker/stream-tree.js",
+    "repo-workflow/stream-tree.js"
+  ],
+  "files.js": [
+    "repo-portrait-changes/files.js",
+    "repo-portrait-reader/files.js"
+  ],
+  "stream-picker-routing.js": [
+    "repo-stream-picker/routing.js",
+    "repo-workflow/routing.js"
+  ],
+  "routing-core.js": [
+    "repo-portrait-reader/routing.js",
+    "repo-portrait-review/routing.js",
+    "repo-reader/routing.js",
+    "repo-review/routing.js",
+    "repo-stream-picker/routing-core.js",
+    "repo-workflow/routing-core.js"
+  ]
+}

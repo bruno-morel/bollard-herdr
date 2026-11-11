@@ -17,11 +17,13 @@ spec.loader.exec_module(I)
 class Installer(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / "source"
         self.home = self.root / "home"
         (self.source / "bin").mkdir(parents=True)
         self.home.mkdir()
+        (self.source / "desktop/shared").mkdir(parents=True)
+        (self.source / "desktop/shared.json").write_text("{}")
         for name in (
             "repo_operations.py",
             "repo_tui_panel.py",
@@ -45,6 +47,19 @@ class Installer(unittest.TestCase):
             io.StringIO()
         ):
             I.main()
+
+    def test_stale_desktop_package_blocks_install_before_any_writes(self):
+        (self.source / "desktop/shared/state.js").write_text("export const v = 2;\n")
+        (self.source / "desktop/shared.json").write_text(
+            json.dumps({"state.js": ["example/state.js"]})
+        )
+        mod = self.source / "herdr/mods/example"
+        mod.mkdir(parents=True)
+        (mod / "mod.json").write_text("{}")
+        (mod / "state.js").write_text("export const v = 1;\n")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.run_install("--apply")
+        self.assertEqual(list(self.home.iterdir()), [])
 
     def test_desktop_and_tui_have_separate_interface_targets(self):
         mod = self.source / "herdr/mods/example"

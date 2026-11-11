@@ -74,6 +74,10 @@ handles selection; `repo-helper`, `repo-sync`, `repo-folders`, `repo-workflow`,
 `repo-spaces`, `repo-tabs` and `repo-menu` provide the associated controls.
 `repo-reader` and `repo-review` support the alternative desktop layout.
 
+Shared helpers are maintained in `desktop/shared/` at the repository root.
+Run `python3 desktop_build.py` after editing them; the generated copies keep
+each mod independently loadable.
+
 Use native `gpui-kit`/`gpui-base` views and Herdr APIs, not DOM components. Commands
 and async operations go through the supplied adapters. Shipped `agents` and
 `workspace-chrome` mods remain external Herdr dependencies. Icons are in the mod

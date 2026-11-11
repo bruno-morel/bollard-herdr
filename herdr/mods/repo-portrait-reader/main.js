@@ -134,7 +134,7 @@ export default class RepoReader extends View {
   }
   browser(t) {
     const choice=this.choices(),{total,modified}=choice;
-    const rows=this.treeRows=browseRows(choice.rows,this.browseMode,this.expanded,this.filter,this.path);
+    const rows=this.treeRows=browseRows(choice.rows,this.browseMode,this.expanded,this.filter);
     return v_flex().h_full().w(245).min_w(140).flex_none().border_r(1).border_color(t.border)
       .child(h_flex().px(7).py(5).gap(1).items_center()
         .child(div().id('read-all').flex_1().min_w(0).px(5).py(6).rounded(5).text_size(11).text_color(t.muted).truncate()

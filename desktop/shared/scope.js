@@ -1,0 +1,16 @@
+import { props, shared, terminals } from 'herdr';
+export const KEY='repo.portrait.lanes';
+export const VIEWS='repo.portrait.views';
+export function laneConfig(lane=props()?.lane){return (shared(KEY)||{})[lane]||props()?.context||null;}
+export function machineOf(address){return address.includes('/')?address.slice(0,address.lastIndexOf('/')):null;}
+export function matching(all,c){return c?all.filter(t=>t.state==='live'&&machineOf(t.address)===c.on&&(t.labels?.['repo-tools.checkout']||t.cwd)===c.cwd):[];}
+export function leadFor(all,c){const rows=matching(all,c).filter(t=>t.labels?.['repo-tools.role']===c.role);return rows.find(t=>t.address===c.terminal)||rows[0]||null;}
+export function scopedLocation(){const c=laneConfig();return c?{...c,key:JSON.stringify([c.on,c.cwd])}:null;}
+export function scopedRequest(){
+ const c=laneConfig();if(!c)return null;
+ return matching(terminals(),c).map(t=>{try{
+  const r=JSON.parse(t.labels?.['repo-read.request']||'{}');
+  if(r.v!==1||!/^[a-f0-9]{24}$/.test(r.id)||r.root!==c.cwd||typeof r.path!=='string'||r.path.startsWith('/')||r.path.split('/').includes('..')||r.path.includes('\0')||!Number.isFinite(r.time))return null;
+  return {...r,address:t.address,key:t.address+':'+r.id};
+ }catch{return null;}}).filter(Boolean).sort((a,b)=>b.time-a.time)[0]||null;
+}

@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import tempfile
 
+from desktop_build import check as check_desktop
+
 SOURCE = Path(__file__).resolve().parent
 
 
@@ -60,6 +62,10 @@ def main():
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--verify", action="store_true")
     args = parser.parse_args()
+    try:
+        check_desktop(SOURCE)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
     home = Path.home()
     manifest = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) / "repo-tools/source-install.json"
     baseline = json.loads((SOURCE / "baseline.json").read_text())
