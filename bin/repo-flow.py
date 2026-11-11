@@ -157,15 +157,24 @@ def phase(runtime, job, state, message):
         data = {
             k: job.get(k) for k in ("state", "message", "stream", "updated", "token")
         }
-        command(
-            [
-                "hc",
-                "label",
-                os.environ["HC_TERMINAL_ID"],
-                "repo-flow.status=" + json.dumps(data),
-            ],
-            stdout=sp.DEVNULL,
-        )
+        try:
+            command(
+                [
+                    "hc",
+                    "label",
+                    os.environ["HC_TERMINAL_ID"],
+                    "repo-flow.status=" + json.dumps(data),
+                ],
+                stdout=sp.DEVNULL,
+                timeout=10,
+            )
+        except (OSError, sp.SubprocessError) as exc:
+            # Labels mirror durable state; a display failure must not abort work
+            # or turn a completed step into a retryable task.
+            print(
+                f"Workflow status saved; Herdr label update failed: {exc}",
+                file=sys.stderr,
+            )
 
 
 def check_cancel(runtime, job):
@@ -604,26 +613,23 @@ def launch(args):
         ]
         for k, v in labels.items():
             argv += ["--label", k + "=" + v]
-        try:
-            command(
-                argv
-                + [
-                    "--",
-                    sys.executable,
-                    str(BIN / "repo-flow.py"),
-                    "_worker",
-                    str(runtime),
-                    token,
-                ],
-                stdout=sp.DEVNULL,
-                timeout=20,
-            )
-            row = hc("get", name)
-            # Worker may already have updated its state; do not overwrite it.
-            # The worker alone updates its state after launch.
-        except Exception:
-            # Never replay a possibly-delivered launch.
-            raise
+        # Never replay a possibly-delivered launch if this call fails.
+        command(
+            argv
+            + [
+                "--",
+                sys.executable,
+                str(BIN / "repo-flow.py"),
+                "_worker",
+                str(runtime),
+                token,
+            ],
+            stdout=sp.DEVNULL,
+            timeout=20,
+        )
+        row = hc("get", name)
+        # Worker may already have updated its state; do not overwrite it.
+        # The worker alone updates its state after launch.
         print(
             json.dumps(
                 {
