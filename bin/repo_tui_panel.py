@@ -11,7 +11,14 @@ from pathlib import Path
 import subprocess as sp
 import textwrap
 import time
-from repo_tui_common import *
+import re
+import repo_stream_picker as W
+from repo_terminal_ui import UI, clean, clipped
+from repo_tui_common import (
+    Backend, bar, control, focus_conversation, lane_state, layout, level,
+    memory, native, pane_id, reset_note, runtime, save, state, status, update,
+    viewer_started,
+)
 from repo_tui_routing import (
     DOCS,
     request_for,
@@ -71,7 +78,7 @@ def lines_for(text, width):
     for raw in str(text).splitlines():
         lines.extend(
             textwrap.wrap(
-                W.clean(raw).expandtabs(4),
+                clean(raw).expandtabs(4),
                 max(8, width),
                 replace_whitespace=False,
                 drop_whitespace=False,
@@ -99,7 +106,7 @@ def test_line(row):
 
 class Panel:
     def __init__(self, screen, lane, view):
-        self.ui = W.UI(screen)
+        self.ui = UI(screen)
         self.s = screen
         self.lane = lane
         self.view = view
@@ -449,7 +456,7 @@ class Panel:
                 "--source",
                 "repo-dashboard",
                 "--title",
-                W.clean(lead.get("title") or W.label(self.row, "stream")),
+                clean(lead.get("title") or W.label(self.row, "stream")),
                 "--state-label",
                 "idle=" + s,
                 "--token",
@@ -893,7 +900,7 @@ class Panel:
         out = self.busy(
             "Opening helper…", lambda: self.b.call(self.row, role, args, raw=True)
         )
-        self.message = W.clean(out)
+        self.message = clean(out)
         self.last["agents"] = 0
 
     def run_tests(self):
@@ -1175,7 +1182,7 @@ class Panel:
             self.ui.put(
                 y + i,
                 x,
-                W.clipped(line, width - 1),
+                clipped(line, width - 1),
                 self.ui.color(color) if color else 0,
             )
         return end
@@ -1354,7 +1361,7 @@ class Panel:
                 self.ui.put(
                     y + i - start,
                     1,
-                    W.clipped(text, left - 2),
+                    clipped(text, left - 2),
                     (
                         curses.A_REVERSE
                         if i == self.index and not self.preview_focus

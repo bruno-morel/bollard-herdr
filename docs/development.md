@@ -21,6 +21,21 @@ flowchart TB
 | Project | Durable artifacts in `docs/`; generated scratch stays ignored. |
 | Machine | Credentials, histories, pins and counters stay outside Git. |
 
+## Terminal pieces
+
+```mermaid
+flowchart LR
+  CLI[repo-workflow · CLI] --> P[repo_stream_picker · choices]
+  D[repo_tui_panel · tools] --> P
+  P --> U[repo_terminal_ui · input and drawing]
+  D --> U
+  P --> B[repo_stream_backend · Herdr commands]
+  D --> B
+```
+
+Keep terminal rendering out of the backend. Keep agent launches out of drawing
+code. The CLI is an entry point, not an importable toolbox in disguise.
+
 ## Check a change
 
 ```sh

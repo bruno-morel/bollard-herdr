@@ -9,7 +9,11 @@ import shutil
 import subprocess as sp
 import sys
 import time
-from repo_tui_common import *
+import repo_stream_backend as W
+from repo_tui_common import (
+    BASE, Backend, SESSION, control, lane_state, layout, managed, native,
+    pane_id, read, runtime, save, state, update,
+)
 
 def seed():
     b=Backend()

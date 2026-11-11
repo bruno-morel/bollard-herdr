@@ -1,7 +1,5 @@
 """Shared, machine-local presentation state; agents remain owned by herdr-core."""
 import fcntl
-import importlib.machinery
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,11 +9,7 @@ import subprocess as sp
 import tempfile
 import time
 
-BIN = Path(__file__).resolve().parent
-loader = importlib.machinery.SourceFileLoader('stream_picker', str(BIN/'repo-workflow'))
-spec = importlib.util.spec_from_loader(loader.name, loader)
-W = importlib.util.module_from_spec(spec)
-loader.exec_module(W)
+import repo_stream_backend as Streams
 SESSION = os.environ.get('REPO_TUI_SESSION', 'studio-work-v2')
 BASE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state')))/'repo-tools'/'tui'
 
@@ -91,26 +85,13 @@ def status(row):
     s = row.get('status')
     return s if isinstance(s, str) else (s or {}).get('state', 'unknown')
 
-class Backend(W.Backend):
-    def script(self, on, name, args=(), cwd=None, timeout=25):
-        if cwd:
-            return self.call({'address':on+'/t0' if on else 't0','cwd':cwd},name,args,timeout)
-        return super().script(on,name,args,cwd,timeout)
-
+class Backend(Streams.Backend):
     def call(self, row, name, args=(), timeout=40, raw=False):
-        on = W.machine(row['address'])
-        cwd = W.label(row, 'checkout') or row['cwd']
-        # No shell interpolation. Both Intel and Apple silicon Homebrew work over SSH.
-        code = ('import os,sys; from pathlib import Path; '
-                'p=Path.home()/".local/bin"/sys.argv[1]; '
-                'os.environ["PATH"]=os.pathsep.join([str(Path.home()/".local/bin"),'
-                '"/opt/homebrew/bin","/usr/local/bin",os.environ.get("PATH","/usr/bin:/bin")]); '
-                'os.execv(str(p),[str(p),*sys.argv[2:]])')
-        cmd = [self.binary, 'exec', *(['--on', on] if on else []), '--timeout', str(timeout), '--cwd', cwd,
-               '--', 'python3', '-c', code, name, *args]
-        r = sp.run(cmd, capture_output=True, text=True, timeout=timeout+15)
-        if r.returncode: raise RuntimeError(r.stderr.strip() or r.stdout.strip() or 'Command failed')
-        return r.stdout if raw else json.loads(r.stdout.strip().split('\n')[-1])
+        return self.script(
+            Streams.machine(row['address']), name, args,
+            cwd=Streams.label(row, 'checkout') or row['cwd'],
+            timeout=timeout, raw=raw,
+        )
 
     def data(self, row, *args): return self.call(row, 'repo-tui-data.py', args)
     def work(self, row, *args): return self.call(row, 'work', args)
