@@ -37,6 +37,7 @@ from repo_tui_routing import (
     display_width,
     toolbar_start,
 )
+from repo_tui_queries import queries
 import repo_tui_markdown as MD
 
 INFO = {
@@ -165,118 +166,15 @@ class Panel:
             return
         row = dict(self.row)
         attached = viewer_started() if self.view == "panel" else None
-        self.fetch(
-            "lead", lambda: self.b.hc("get", row["address"]), 1 if attached else 5
-        )
-        tab = self.tab
-        if self.view == "panel":
-            self.fetch(
-                "checkpoint",
-                lambda: self.b.call(
-                    row,
-                    "repo-new-conversation.py",
-                    [W.label(row, "stream"), "--status"],
-                ),
-                3,
-            )
-        if tab in ("docs", "files", "git"):
-            self.fetch(tab, lambda: self.b.data(row, tab), 10)
-        elif tab == "docker":
-            if not self.frozen:
-
-                def logs():
-                    d = self.b.work(
-                        row,
-                        "observe",
-                        W.label(row, "stream"),
-                        "--json",
-                        "--status-only",
-                    )
-                    if d.get("state") == "active":
-                        d.update(
-                            self.b.call(
-                                row, "repo-logfeed.py", ["poll", W.label(row, "stream")]
-                            )
-                        )
-                    return d
-
-                self.fetch("docker", logs, 2)
-        elif tab == "tests":
-            self.fetch(
-                tab,
-                lambda: self.b.work(
-                    row, "tests", "status", W.label(row, "stream"), "--json"
-                ),
-                5,
-            )
-        elif tab == "review":
-            self.fetch(
-                tab,
-                lambda: self.b.work(
-                    row, "review", W.label(row, "stream"), "--status", "--json"
-                ),
-                5,
-            )
-            self.fetch(
-                "completion",
-                lambda: self.b.work(
-                    row, "complete", W.label(row, "stream"), "--status", "--json"
-                ),
-                15,
-            )
-        elif tab in ("agents", "questions"):
-            self.fetch(
-                "agents",
-                lambda: self.b.data(row, "agents", row["address"].rsplit("/", 1)[-1]),
-                5,
-            )
-            self.fetch(
-                "metadata",
-                lambda: self.b.call(
-                    row,
-                    "repo-panel.py",
-                    ["metadata", row["address"].rsplit("/", 1)[-1]],
-                ),
-                30,
-            )
-        elif tab in ("context", "usage"):
-            self.fetch(
-                "metadata",
-                lambda: self.b.call(
-                    row,
-                    "repo-panel.py",
-                    ["metadata", row["address"].rsplit("/", 1)[-1]],
-                ),
-                30,
-            )
-            if tab == "usage":
-                self.fetch(
-                    "usage",
-                    lambda: self.b.call(row, "repo-provider.py", ["status"]),
-                    30,
-                )
-                self.fetch(
-                    "review",
-                    lambda: self.b.work(
-                        row, "review", W.label(row, "stream"), "--status", "--json"
-                    ),
-                    30,
-                )
-        elif tab == "services":
-            self.fetch(
-                tab,
-                lambda: self.b.work(
-                    row,
-                    "observe",
-                    W.label(row, "stream"),
-                    "--json",
-                    "--status-only",
-                    "--metrics",
-                ),
-                15,
-            )
-        elif tab == "git-info":
-            self.fetch("git", lambda: self.b.data(row, "git"), 10)
+        for key, fn, period in queries(
+            self.b,
+            row,
+            self.tab,
+            panel=self.view == "panel",
+            attached=bool(attached),
+            frozen=self.frozen,
+        ):
+            self.fetch(key, fn, period)
         self.collect()
         if self.view == "panel":
             self.route_file(attached)
