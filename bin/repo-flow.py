@@ -699,7 +699,7 @@ def helper(args):
                 "One helper is already open. Read/close its pane before starting another."
             )
         name = args.agent or "codex"
-        binary = A.executable(name)
+        A.executable(name)  # Fail before creating helper state if the CLI is missing.
         token = uuid.uuid4().hex[:10]
         base = A.git(target, "rev-parse", "HEAD")
         helper_root = target
