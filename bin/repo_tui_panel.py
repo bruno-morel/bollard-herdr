@@ -9,19 +9,29 @@ import json
 import os
 from pathlib import Path
 import subprocess as sp
-import textwrap
 import time
 import re
 import repo_stream_picker as W
 from repo_terminal_ui import UI, clean, clipped
+from repo_helper_context import PRESETS
+from repo_tui_present import tree_rows, lines_for, test_line, info_lines
 from repo_tui_common import (
-    Backend, bar, control, focus_conversation, lane_state, layout, level,
-    memory, native, pane_id, reset_note, runtime, save, state, status, update,
+    Backend,
+    control,
+    focus_conversation,
+    lane_state,
+    layout,
+    native,
+    pane_id,
+    runtime,
+    save,
+    state,
+    status,
+    update,
     viewer_started,
 )
 from repo_tui_routing import (
     DOCS,
-    request_for,
     pending_request,
     ack_if_current,
     display_width,
@@ -29,20 +39,6 @@ from repo_tui_routing import (
 )
 import repo_tui_markdown as MD
 
-PRESETS = {
-    "investigate-failure": (
-        "Investigate failure",
-        "Explain the failure, distinguish evidence from hypotheses, and propose the smallest next check or fix.",
-    ),
-    "campaign-follow-up": (
-        "Campaign follow-up",
-        "Review campaign performance for these dates and suggest one measurable next experiment.",
-    ),
-    "pre-publication": (
-        "Pre-publication check",
-        "Check claims, links, tracking, consistency and missing assets. Separate blockers from suggestions.",
-    ),
-}
 INFO = {
     "agents": "Agents",
     "context": "Context",
@@ -50,58 +46,6 @@ INFO = {
     "services": "Containers",
     "git-info": "Git status",
 }
-
-
-def tree_rows(files, folder="", query=""):
-    source = [r for r in files if query.lower() in r["path"].lower()]
-    if query:
-        return [("file", r["path"], r) for r in source]
-    prefix = folder + "/" if folder else ""
-    source = [r for r in source if r["path"].startswith(prefix)]
-    dirs = sorted(
-        {
-            r["path"][len(prefix) :].split("/")[0]
-            for r in source
-            if "/" in r["path"][len(prefix) :]
-        }
-    )
-    rows = [("up", "..", {})] if folder else []
-    rows += [("dir", prefix + d, {}) for d in dirs]
-    rows += [
-        ("file", r["path"], r) for r in source if "/" not in r["path"][len(prefix) :]
-    ]
-    return rows
-
-
-def lines_for(text, width):
-    lines = []
-    for raw in str(text).splitlines():
-        lines.extend(
-            textwrap.wrap(
-                clean(raw).expandtabs(4),
-                max(8, width),
-                replace_whitespace=False,
-                drop_whitespace=False,
-            )
-            or [""]
-        )
-    return lines or [""]
-
-
-def test_line(row):
-    code = row.get("exit_code")
-    summary = row.get("native_summary") or {}
-    mark = "✓" if code == 0 else "…" if code is None else "✗"
-    summary = (
-        " · ".join(
-            f"{k}: {v}" for k, v in summary.items() if isinstance(v, (int, float, str))
-        )
-        if isinstance(summary, dict)
-        else str(summary)
-    )
-    return f"{mark} {row['id']}  {summary or ('Exit '+str(code))}", (
-        2 if code == 0 else 3 if code is None else 4
-    )
 
 
 class Panel:
@@ -1393,132 +1337,6 @@ class Panel:
             else:
                 self.paint_text(text, y, x, height, width)
 
-    def info_lines(self):
-        d = self.cache.get("metadata", {})
-        lines = []
-        if self.tab == "usage":
-            providers = self.cache.get("usage", {}).get("providers", [])
-            for p in providers:
-                name = p["provider"]
-                lines.append(
-                    (
-                        name.upper()
-                        + " · "
-                        + ("Connected" if p.get("connected") else "Not connected"),
-                        1,
-                    )
-                )
-                quota = (
-                    p.get("quota")
-                    or (d.get("quota") if d.get("provider") == name else {})
-                    or {}
-                )
-                found = False
-                for key, q in quota.items():
-                    if not isinstance(q, dict) or "used_percent" not in q:
-                        continue
-                    found = True
-                    v = q.get("used_percent")
-                    window = q.get("window_minutes")
-                    label = (
-                        "Weekly"
-                        if window == 10080 or key == "seven_day"
-                        else (
-                            "5 hours"
-                            if key == "five_hour"
-                            else key.replace("_", " ").title()
-                        )
-                    )
-                    lines += [
-                        (
-                            (
-                                bar(v, 8) + f" {v:g}% · {label}"
-                                if v is not None
-                                else bar(None, 8) + " " + label
-                            ),
-                            level(v),
-                        ),
-                        (reset_note(q.get("resets_at")), 0),
-                    ]
-                if not found:
-                    lines.append(
-                        (
-                            (
-                                "Quota not reported"
-                                if p.get("connected")
-                                else "Sign in on the agent’s machine"
-                            ),
-                            0,
-                        )
-                    )
-                if name == "claude":
-                    left = self.cache.get("review", {}).get("remaining")
-                    lines += [
-                        (f'Review calls: {left if left is not None else "?"} / 2', 1),
-                        ("24 turns · 20 min per call", 0),
-                    ]
-                lines.append(("", 0))
-            if not providers:
-                lines = [("Reading account limits…", 0)]
-        elif self.tab == "context":
-            x = d.get("context") or {}
-            used = x.get("input")
-            limit = x.get("window")
-            pct = 100 * used / limit if used is not None and limit else None
-            lines = [
-                (d.get("model") or "Model not reported", 1),
-                ("Reasoning: " + str(d.get("reasoning") or "not reported"), 0),
-                (
-                    bar(pct) + " " + (f"{pct:.0f}%" if pct is not None else "Unknown"),
-                    level(pct),
-                ),
-                (f'Input {used if used is not None else "?"} / {limit or "?"}', 0),
-                (
-                    "Compactions: "
-                    + str(
-                        d.get("compactions")
-                        if d.get("compactions") is not None
-                        else "?"
-                    ),
-                    0,
-                ),
-                ("Last reported request; not a live estimate.", 0),
-            ]
-        elif self.tab == "services":
-            d = self.cache.get("services", {})
-            for s in d.get("services", []):
-                used, limit, pct, capped = memory(s)
-                up = int(s.get("UptimeSeconds") or 0)
-                lines += [
-                    (
-                        s.get("Service", "container")
-                        + " · "
-                        + s.get("State", "unknown")
-                        + " "
-                        + s.get("Health", ""),
-                        (
-                            2
-                            if s.get("State") == "running"
-                            and s.get("Health") != "unhealthy"
-                            else 4
-                        ),
-                    ),
-                    (f'Up {up//86400}d {up%86400//3600}h · ↻ {s.get("Restarts",0)}', 0),
-                    (bar(pct, 8) + " " + used + " / " + limit, level(pct)),
-                    ("Container cap" if capped else "Shared Docker host limit", 0),
-                    ("", 0),
-                ]
-            if not lines:
-                lines = [("No containers running in this stream.", 0)]
-        elif self.tab == "git-info":
-            d = self.cache.get("git", {})
-            lines = [(d.get("branch", ""), 1)] + [
-                (r["status"] + " " + r["path"], 0) for r in d.get("files", [])
-            ]
-            if len(lines) == 1:
-                lines.append(("Working tree clean", 2))
-        return lines
-
     def render(self):
         self.markdown_visible = False
         self.s.erase()
@@ -1688,7 +1506,7 @@ class Panel:
                     curses.A_DIM,
                 )
         else:
-            lines = self.info_lines()
+            lines = info_lines(self.tab, self.cache, self.errors)
             self.offset = max(0, min(self.offset, max(0, len(lines) - height)))
             for i, (text, col) in enumerate(lines[self.offset : self.offset + height]):
                 self.ui.put(y + i, 1, text, self.ui.color(col) if col else 0)

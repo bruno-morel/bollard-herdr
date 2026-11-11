@@ -38,6 +38,8 @@ code. The CLI is an entry point, not an importable toolbox in disguise.
 
 `repo_flow_menu` handles the plain-text menu and passes choices to `repo-flow`.
 It never owns workflow state, review allowances or agent locks.
+`repo_tui_present` turns cached evidence into display rows; it does no I/O.
+Missing data means loading or unknown—not a clean bill of health.
 
 ## Check a change
 
