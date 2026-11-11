@@ -1,0 +1,25 @@
+layout {
+    default_tab_template {
+        children
+        pane size=1 borderless=true { plugin location="zellij:compact-bar"; }
+    }
+    tab name="WORK AI" focus=true {
+        pane split_direction="horizontal" {
+            pane size="24%" name="APP LOGS" command="docker" { args "compose" "logs" "-f" "--tail=100"; }
+            pane size="76%" split_direction="vertical" {
+                pane size="78%" name="WORK AI" command="work-agent"
+                pane size="22%" name="STATUS / SHELL" command="work-shell"
+            }
+        }
+    }
+    tab name="TESTS" {
+        pane name="TEST SHELL"
+        pane name="VALIDATE / E2E"
+
+    }
+    tab name="READ" {
+        pane name="MARKDOWN READER" command="repo-read" close_on_exit=false
+    }
+
+    tab name="GIT" { pane name="GIT" command="lazygit"; }
+}

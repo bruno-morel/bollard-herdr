@@ -1,0 +1,199 @@
+import {reportPanel} from './signals.js';
+import {askHelper} from './helper.js';
+import {button as control, toolColors} from './ui.js';
+import { scopedLocation, scopedRequest } from './scope.js';
+// Uses Herdr's native Markdown and source viewers; no terminal replaces the conversation.
+import { View, div } from 'gpui-kit';
+import { v_flex, h_flex, TextView, Editor, EditorState, Input, InputState, v_virtual_list, Scrollbar, VirtualListScrollHandle } from 'gpui-base';
+import { terminals, spaces, panes, focused, exec, hc, theme, settings, nextCommand, props, shared, setShared } from 'herdr';
+import { selectRequest, selectLocation, machineOf } from './routing.js';
+import { parseFiles, fileChoices, browseRows, ancestors } from './files.js';
+const LANG = { ts: 'js', tsx: 'js', jsx: 'js', mjs: 'js', toml: 'yaml', yml: 'yaml', py: 'python', sh: 'bash', zsh: 'bash' };
+const location = () => scopedLocation();
+const requested = () => scopedRequest();
+const GIT = ['--no-optional-locks', '-c', 'core.fsmonitor=false'];
+
+export default class RepoReader extends View {
+  init(_props, cx) {
+    this.mode=props()?.mode||'docs';this.editing=false;this.digest=null;this.drafts=new Map();this.context = null; this.saved = new Map(); this.seen = new Set(); this.generation = 0;
+    this.path = null; this.text = null; this.code = null; this.source = false;
+    this.files = { all: [], changed: [] }; this.showFiles = true; this.forceAll = false; this.filter = '';
+    this.browseMode=localStorage.getItem('repo.browser.mode.'+this.mode)||'tree';this.expanded=new Set();
+    this.input = InputState.new({ placeholder: 'Find a file…' });
+    this.scroll = VirtualListScrollHandle.new();
+    this.input.on('change', (_e,cx) => { this.filter = this.input.value(); this.scroll.scroll_to_item(0); cx.notify(); });
+    this.input.on('submit', (_e,cx) => { const row = this.choices().rows.find(f => !f.deleted); if (row) this.pick(row.path,cx); });
+    cx.timer.every(10000, cx => this.refreshFiles(cx));
+    // Also available to Herdr's command palette/key bindings; never sends agent keystrokes.
+    cx.spawn(async cx => { for (;;) {
+      const command = await nextCommand();
+      if (command === 'files') this.showFiles = !this.showFiles;
+      if (command === 'all') { this.forceAll = !this.forceAll; this.scroll.scroll_to_item(0); }
+      if (command === 'refresh') { this.refreshFiles(cx); if (this.path) this.load(this.path,cx); }
+      if (command === 'source') this.source = !this.source;
+      if (command.startsWith('open:')) this.pick(command.slice(5),cx);
+      cx.notify();
+    } });
+  }
+  current(context) { return this.context === context && location()?.key === context.key; }
+  sync(cx) {
+    const next = location();
+    if ((next?.key ?? null) === (this.context?.key ?? null)) return;
+    this.retainDraft();this.editing=false;
+    if (this.context) this.saved.set(this.context.key, this.path);
+    this.context = next ? { ...next, root: null } : null;
+    try{this.expanded=new Set(JSON.parse(localStorage.getItem('repo.browser.folders.'+this.mode+':'+next?.key)||'[]'));}catch{this.expanded=new Set();}
+    this.path = null; this.text = null; this.error = null; this.listError = null;
+    this.files = { all: [], changed: [] }; this.forceAll = false; this.filter = '';
+    this.code?.release(); this.code = null; ++this.generation;
+    if (this.context) this.refreshFiles(cx);
+  }
+  async git(args, context) {
+    const r = await exec('git', [...GIT, ...args], { cwd: context.root || context.cwd, on: context.on });
+    if (r.code) throw new Error(r.stderr.trim() || 'Cannot read repository files');
+    return r.stdout;
+  }
+  refreshFiles(cx) {
+    const context = this.context;
+    if (!context || !this.current(context) || context.loading) return;
+    context.loading = true;
+    cx.spawn(async cx => {
+      try {
+        if (!context.root) {
+          const root = (await this.git(['rev-parse','--show-toplevel'],context)).replace(/\n$/, '');
+          if (!this.current(context)) return;
+          context.root = root; this.input.set_value('');
+        }
+        const status = await this.git(['status','--porcelain=v1','-z','--no-renames','--untracked-files=all'],context);
+        const tracked = await this.git(['ls-files','--cached','--others','--exclude-standard','-z'],context);
+        if (!this.current(context)) return;
+        this.files = parseFiles(status,tracked); this.listError = null;
+        if (!this.path && this.saved.get(context.key)) this.load(this.saved.get(context.key),cx);
+      } catch (e) { if (this.current(context)) this.listError = String(e); }
+      finally { context.loading = false; cx.notify(); }
+    });
+  }
+  choices() { const allow=f=>this.mode!=='docs'||/\.(md|markdown|mdown|mkd|txt)$/i.test(f.path);return fileChoices({all:this.files.all.filter(allow),changed:this.files.changed.filter(allow)},this.forceAll,this.filter); }
+  askHelper(){if(this.text===null||!this.path)return;askHelper(this.context,{pane:this.mode,source:this.path,text:this.editing?this.code.value():this.text,draft:this.editing},this.mode==='docs'?'pre-publication':'investigate-failure');}
+  draftKey(){return this.context?.key+':'+this.path;}
+  retainDraft(){if(this.editing&&this.code)this.drafts.set(this.draftKey(),{text:this.code.value(),digest:this.digest});}
+  edit(cx){if(!this.path||this.editing)return;const c=this.context,path=this.path,g=this.generation;
+    cx.spawn(async cx=>{try{const r=await exec('repo-panel.py',['read',path],{cwd:c.root,on:c.on});if(!this.current(c)||g!==this.generation)return;if(r.code)throw new Error(r.stderr||r.stdout);const doc=JSON.parse(r.stdout),draft=this.drafts.get(this.draftKey());this.digest=draft?.digest||doc.digest;this.code?.release();this.code=EditorState.new({readonly:false,value:draft?.text??doc.text,font_family:settings().font_family,font_size:13});this.editing=true;this.source=true;this.error=null;
+    }catch(e){this.error=String(e);}cx.notify();});
+  }
+  save(cx){if(!this.editing||this.saving)return;const c=this.context,path=this.path,value=this.code.value(),digest=this.digest,g=this.generation;this.saving=true;
+    cx.spawn(async cx=>{try{const r=await exec('repo-panel.py',['save',path,'--digest',digest,'--text',value],{cwd:c.root,on:c.on});if(r.code)throw new Error(r.stderr||r.stdout);this.drafts.delete(c.key+':'+path);if(this.current(c)&&g===this.generation){const doc=JSON.parse(r.stdout);this.text=doc.text;this.digest=doc.digest;this.editing=false;this.error=null;this.code.release();this.code=EditorState.new({readonly:true,value:this.text,font_size:13,font_family:settings().font_family});this.refreshFiles(cx);}}catch(e){if(this.current(c)&&g===this.generation)this.error=String(e);}finally{this.saving=false;cx.notify();}});
+  }
+  pick(path,cx) {
+    const entry = this.choices().rows.find(f => f.path === path);
+    if (!entry || entry.deleted) return;
+    this.load(path,cx); cx.notify();
+  }
+  async acknowledge(request, status, message = '') {
+    if (!request) return;
+    try { await hc(['label',request.address,'repo-read.result='+JSON.stringify({id:request.id,status,message})]); }
+    catch { /* Display remains usable if an acknowledgement cannot reach the core. */ }
+  }
+  load(path,cx,request=null) {
+    const context = this.context;
+    if (!context?.root) return;
+    this.retainDraft();this.editing=false;
+    for(const id of ancestors(path,this.browseMode))this.expanded.add(id);
+    this.path = path; this.text = null; this.error = null; this.source = false;
+    this.code?.release(); this.code = null;
+    const generation = ++this.generation;
+    cx.spawn(async cx => {
+      try {
+        // Shared remote checks prevent symlink escapes, binary reads, and oversized previews.
+        const result = await exec('repo-read',['--herdr-read',path],{cwd:context.root,on:context.on});
+        if (!this.current(context) || generation !== this.generation) return;
+        if (result.code) throw new Error(result.stderr.trim() || 'Cannot read this file');
+        const document = JSON.parse(result.stdout);
+        if (document.root !== context.root || document.path !== path || typeof document.text !== 'string') throw new Error('File identity changed; select it again.');
+        this.text = document.text; this.markdown = /\.(md|markdown|mdown|mkd)$/i.test(path);
+        const t=theme(), ext=path.split('.').pop().toLowerCase();
+        this.code=EditorState.new({language:LANG[ext]??ext,readonly:true,value:this.text,font_family:settings().font_family,font_size:13,
+          syntax:{keyword:t.ansi5,string:t.ansi2,comment:t.dim,function:t.ansi4,type:t.ansi3,number:t.ansi1,constant:t.ansi6}});
+        this.saved.set(context.key,path); cx.notify();
+        await this.acknowledge(request,'shown');
+      } catch (e) {
+        if (!this.current(context) || generation !== this.generation) return;
+        this.error=String(e); this.text=null; cx.notify();
+        await this.acknowledge(request,'error',this.error.slice(0,300));
+      }
+    });
+  }
+  button(id,label,action) {
+    const t=theme(); return div().id(id).px(8).py(5).rounded(5).cursor_pointer().text_size(12).text_color(t.muted)
+      .hover(s=>s.bg(t.hover)).on_click(action).child(label);
+  }
+  treeClick(id,cx){const row=this.treeRows.find(r=>r.id===id);if(!row)return;
+    if(row.kind==='file'){this.pick(row.path,cx);return;}
+    if(this.expanded.has(id))this.expanded.delete(id);else this.expanded.add(id);
+    localStorage.setItem('repo.browser.folders.'+this.mode+':'+this.context?.key,JSON.stringify([...this.expanded]));cx.notify();
+  }
+  browser(t) {
+    const choice=this.choices(),{total,modified}=choice;
+    const rows=this.treeRows=browseRows(choice.rows,this.browseMode,this.expanded,this.filter,this.path);
+    return v_flex().h_full().w(245).min_w(140).flex_none().border_r(1).border_color(t.border)
+      .child(h_flex().px(7).py(5).gap(1).items_center()
+        .child(div().id('read-all').flex_1().min_w(0).px(5).py(6).rounded(5).text_size(11).text_color(t.muted).truncate()
+          .tooltip(`${modified?'Show all files':'Show modified files when available'} · ${total} files`)
+          .accessibility_label(`${modified?'Modified':'All files'}, ${total} files. Toggle file scope`)
+          .cursor_pointer().hover(s=>s.bg(t.hover)).on_click((_e,cx)=>{this.forceAll=!this.forceAll;this.scroll.scroll_to_item(0);cx.notify();})
+          .child(`${modified?'Modified':'All files'} · ${total} ▾`))
+        .children([['tree','Folders','tree'],['type','File types','types'],['list','List','list']].map(([id,label,icon])=>control('browse-'+id,label,(_e,cx)=>{
+          this.browseMode=id;localStorage.setItem('repo.browser.mode.'+this.mode,id);
+          for(const key of ancestors(this.path,id))this.expanded.add(key);
+          this.scroll.scroll_to_item(0);cx.notify();
+        },{icon,compact:true,selected:this.browseMode===id})))
+        .when(this.browseMode!=='list',e=>e.child(control('browse-collapse','Collapse folders',(_e,cx)=>{
+          this.expanded.clear();localStorage.setItem('repo.browser.folders.'+this.mode+':'+this.context?.key,'[]');
+          this.scroll.scroll_to_item(0);cx.notify();
+        },{icon:'collapse',compact:true}))))
+      .child(div().px(12).pb(6).child(Input.new(this.input).h(30).px(8).rounded(6).border_1().border_color(t.input).bg(t.background).text_size(12)))
+      .child(v_flex().relative().flex_1().min_h(0)
+        .when(rows.length>0,el=>el.child(v_virtual_list('read-files',rows.length,28,i=>rows[i].id,
+          range=>rows.slice(range.start,range.end).map(row=>h_flex().h(28).pl(10+row.depth*13).pr(10).gap(5).items_center().min_w(0)
+            .when(row.kind==='file'&&row.path===this.path,el=>el.bg(t.selected)).when(!row.deleted,el=>el.cursor_pointer())
+            .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(row.deleted?t.dim:t.foreground).tooltip(row.path).child((row.kind==='directory'?(row.open?'▾ ':'▸ '):'')+row.name))
+            .child(div().flex_none().text_size(10).text_color(t.dim).child(row.kind==='directory'?String(row.count):row.label))))
+          .track_scroll(this.scroll).size_full().on_item_click((id,cx)=>this.treeClick(id,cx)))
+          .child(Scrollbar.vertical('read-files').absolute().inset_0()))
+        .when(!rows.length,el=>el.child(div().p(12).text_size(12).text_color(t.dim).child(this.listError||
+          (this.context?.loading?'Loading files…':this.filter?'No matching files':this.context?'No files':'Select a repository stream')))))
+      .when(Boolean(this.listError)&&rows.length>0,el=>el.child(div().px(12).py(5).text_size(12).text_color(t.blocked).child(this.listError)));
+  }
+  render(cx) {
+    this.sync(cx);
+    reportPanel(this.mode==='docs'?'read':'files',this.context,this.error||this.listError);
+    const draftKey=props()?.lane+':'+this.mode,unsaved=shared('repo.portrait.unsaved')||{},dirty=!!this.editing||this.drafts.size>0;
+    if(unsaved[draftKey]!==dirty)setShared('repo.portrait.unsaved',{...unsaved,[draftKey]:dirty});
+    const request=requested();
+    if (request && (this.mode==='docs')===/\.(md|markdown|mdown|mkd|txt)$/i.test(request.path) && this.context?.root===request.root && this.context?.on===machineOf(request.address) && !this.seen.has(request.key)) {
+      this.seen.add(request.key); this.load(request.path,cx,request);
+    }
+    const t=theme();
+    let document=v_flex().h_full().flex_1().min_w(0).min_h(0).bg(t.background)
+      .when(Boolean(this.path),e=>e.child(div().px(14).py(5).text_size(12).text_color(t.muted).truncate().child(this.path+(this.editing?' · unsaved edit':''))))
+      .when(Boolean(this.error),e=>e.child(div().px(14).py(5).text_size(12).text_color(t.blocked).child(this.error)));
+    if(!this.path)document=document.child(div().p(18).text_color(t.muted).child('Choose a file, or ask the agent to show one.'));
+    else if(this.text===null)document=document.child(div().p(18).child(this.error||'Opening…'));
+    else if(this.markdown&&!this.source&&!this.editing)document=document.child(TextView.markdown(`read-${this.generation}`,this.text).selectable(true).scrollable(true).flex_1().min_h(0).p(16));
+    else document=document.child(Editor.new(this.code).flex_1().min_h(0));
+    const eligible=this.mode==='docs'?'Markdown and .txt':'All file types · native text preview/editor';
+    return v_flex().id('repo-reader').size_full().p(4).min_h(0).min_w(0).rounded(8).overflow_hidden().bg(toolColors().background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
+      .child(h_flex().h(40).flex_none().px(12).gap(4).items_center().border_b(1).border_color(t.border)
+        .child(div().font_semibold().child(this.mode==='docs'?'Docs':'Files'))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(eligible))
+        .when(this.text!==null,e=>e.child(control('reader-helper','Ask a helper',()=>this.askHelper(),{icon:'agents'})))
+        .child(this.button('read-files-toggle',this.showFiles?'Hide list':'File list',(_e,cx)=>{this.showFiles=!this.showFiles;cx.notify();}))
+        .when(this.text!==null&&this.markdown&&!this.editing,e=>e.child(this.button('read-mode',this.source?'Preview':'Source',(_e,cx)=>{this.source=!this.source;cx.notify();})))
+        .when(this.text!==null&&!this.editing,e=>e.child(this.button('read-edit',this.drafts.has(this.draftKey())?'Restore edit':'Edit',(_e,cx)=>this.edit(cx))))
+        .when(this.editing,e=>e.child(this.button('read-save',this.saving?'Saving…':'Save',(_e,cx)=>this.save(cx))).child(this.button('read-cancel','Keep draft / preview',(_e,cx)=>this.load(this.path,cx))))
+        .when(!this.editing,e=>e.child(control('read-refresh','Refresh',(_e,cx)=>{this.refreshFiles(cx);if(this.path)this.load(this.path,cx);cx.notify();},{icon:'refresh',compact:true}))))
+      .child(h_flex().items_stretch().flex_1().min_h(0).min_w(0).when(this.showFiles,e=>e.child(this.browser(t))).child(document));
+  }
+
+  async close() { this.code?.release(); this.input.release(); this.scroll.release(); }
+}

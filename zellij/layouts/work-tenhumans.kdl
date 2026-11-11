@@ -1,0 +1,29 @@
+layout {
+    default_tab_template {
+        children
+        pane size=1 borderless=true { plugin location="zellij:compact-bar"; }
+    }
+    tab name="WORK AI" focus=true {
+        pane split_direction="horizontal" {
+            pane size="24%" name="APP LOGS" command="docker" { args "compose" "logs" "-f" "--tail=100"; }
+            pane size="76%" split_direction="vertical" {
+                pane size="78%" name="WORK AI" command="work-agent"
+                pane size="22%" name="STATUS / SHELL" command="work-shell"
+            }
+        }
+    }
+    tab name="TESTS" {
+        pane name="TEST SHELL"
+        pane name="VALIDATE" command="docker" start_suspended=true {
+            args "compose" "exec" "-T" "tenhumans" "npm" "run" "validate"
+        }
+        pane name="E2E" command="zsh" start_suspended=true {
+            args "-c" "COMPOSE_FILE=\"${COMPOSE_FILE:-docker-compose.yml:docker-compose.override.yml}:docker-compose.test.yml\" docker compose run --rm e2e npm test"
+        }
+    }
+    tab name="READ" {
+        pane name="MARKDOWN READER" command="repo-read" close_on_exit=false
+    }
+
+    tab name="GIT" { pane name="GIT" command="lazygit"; }
+}

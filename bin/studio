@@ -1,0 +1,798 @@
+#!/bin/zsh
+# Previewed branch integration, before repository setup and shorthand.
+if [[ "${1:-}" == sync ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-sync.py" "$@"
+fi
+
+# Shared desktop/TUI workflow: parse before shorthand and repository setup.
+if [[ "${1:-}" == flow ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-flow.py" studio "$@"
+fi
+
+# Herdr dispatch v3: parse help before any repository operations.
+if [[ "${1:-}" == herdr ]]; then
+    shift
+    exec python3 "${0:A:h}/repo_herdr.py" studio "$@"
+fi
+# Studio early help and Herdr dispatch v2
+for _studio_arg in "$@"; do
+    if [[ "$_studio_arg" == --help || "$_studio_arg" == -h || "${1:-}" == help ]]; then
+        print -r -- 'Studio — planning and handoffs'
+        print -r -- ''
+        print -r -- '  studio herdr [stream] [--agent codex|claude|cursor]'
+        print -r -- '      Create/reopen its Herdr pane; --resume [ID] resumes a chat.'
+        print -r -- '      --new-chat starts fresh context; --attach opens it in a terminal.'
+        print -r -- ''
+        print -r -- '  studio flow              Open the shared Herdr workflow menu'
+        print -r -- '  studio flow --help       Workflow actions, helpers and review'
+        print -r -- '  studio open <stream>     Open/create a Zellij stream'
+        print -r -- '  studio close <stream>    Close its Studio Zellij session'
+        print -r -- '  studio list              List repository streams'
+        print -r -- '  studio handoff           Build the current stream handoff'
+        print -r -- '  studio cleanup           Inspect/clean Studio Zellij sessions'
+        print -r -- ''
+        print -r -- 'Help only: no repository, session, or file changes.'
+        exit 0
+    fi
+done
+unset _studio_arg
+
+
+
+set -e
+
+die() { print -ru2 -- "studio: $*"; exit 1; }
+BIN_DIR="${0:A:h}"
+
+# Studio session cleanup v1
+if [[ "${1:-}" == cleanup ]]; then
+    shift
+    exec python3 "$BIN_DIR/studio-cleanup.py" "$@"
+fi
+
+
+# Stream shorthand v1
+case "${1:-}" in
+    ""|new|init|open|ls|list|status|stop|close|rm|remove|idea|asset|handoff|prompt|copy|transfer|agent-prompt|help|-h|--help|-*) ;;
+    *) set -- open "$@" ;;
+esac
+# Repository transfer v1
+if [[ "${1:-}" == transfer ]]; then
+    shift
+    exec python3 "$BIN_DIR/repo-transfer.py" "$@"
+fi
+source "$BIN_DIR/repo-context.zsh"
+
+# Studio stream removal v2
+if [[ "${1:-}" == rm || "${1:-}" == remove ]]; then
+    (( $# == 2 || $# == 3 )) || die "usage: studio rm <stream> [--force]"
+    force=0
+    if (( $# == 3 )); then
+        [[ "$3" == --force ]] || die "unknown option: $3"
+        force=1
+    fi
+    stream="$2"
+    [[ "$stream" =~ '^[a-z0-9][a-z0-9-]*$' ]] || die "invalid stream name"
+    [[ -z "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" ]] ||
+        die "detach first, then run studio rm from the main repository shell"
+
+    branch="codex/$stream"
+    git show-ref --verify --quiet "refs/heads/$branch" ||
+        die "local branch $branch does not exist"
+    [[ "$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)" != "$branch" ]] ||
+        die "run this from the main repository checkout, not the stream being removed"
+    if (( ! force )); then
+        git merge-base --is-ancestor "$branch" HEAD ||
+            die "$branch has unmerged commits; use --force to discard this stream"
+    fi
+
+    studio_rm_has_worktree() {
+        git worktree list --porcelain | awk -v ref="refs/heads/$branch" '
+            $1 == "branch" && $2 == ref { found = 1 }
+            END { exit !found }
+        '
+    }
+
+    print -r -- "Removing stream $stream and its local branch $branch."
+    print -r -- "Remote branches are preserved."
+    if (( force )); then
+        print -r -- "FORCE: discard uncommitted/ignored files, remove the local branch even if unmerged, and delete this workspace's Docker volumes."
+    fi
+    if ! studio_rm_has_worktree; then
+        read -r "reply?Delete local branch $branch? [y/N] "
+        [[ "$reply" == [yY] ]] || exit 0
+    fi
+
+    "$BIN_DIR/studio" close "$stream"
+    if (( force )); then
+        "$BIN_DIR/work" rm "$stream" --force
+    else
+        "$BIN_DIR/work" rm "$stream"
+    fi
+    if studio_rm_has_worktree; then
+        print -r -- "Workspace remains (removal cancelled or incomplete); branch preserved."
+        exit 1
+    fi
+    if (( force )); then
+        git branch -D -- "$branch" || die "workspace removed; branch deletion failed"
+    else
+        git branch -d -- "$branch" || die "workspace removed; Git refused branch deletion"
+    fi
+    print -r -- "Removed Studio stream $stream."
+    exit 0
+fi
+# End Studio stream removal v2
+# Agent-neutral workflow v1
+agent_choice=""
+args=()
+while (( $# )); do
+    if [[ "$1" == --agent ]]; then
+        (( $# >= 2 )) || die "--agent requires codex, claude, or cursor"
+        [[ -z "$agent_choice" ]] || die "provide --agent only once"
+        agent_choice="$2"
+        shift 2
+    else
+        args+=("$1")
+        shift
+    fi
+done
+set -- "${args[@]}"
+if [[ -n "$agent_choice" ]]; then
+    case "$agent_choice" in codex|claude|cursor) ;; *) die "unknown agent: $agent_choice" ;; esac
+    case "${1:-}" in open|new|"") ;; *) die "--agent is supported with open/new only" ;; esac
+fi
+if [[ "${1:-}" == agent-prompt ]]; then
+    shift
+    exec python3 "$BIN_DIR/repo-agent.py" prompt studio "$@"
+fi
+LAYOUT="${STUDIO_LAYOUT:-${ZELLIJ_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij}/layouts/studio.kdl}"
+slugify() {
+    echo "$1" |
+        tr '[:upper:]' '[:lower:]' |
+        sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+project_dir() { print -r -- "$ROOT/docs"; }
+set_current() { :; }
+current_project() { print -r -- "$PROJECT"; }
+
+session_exists() {
+    local sessions
+    sessions="$(zellij list-sessions --no-formatting 2>/dev/null)" || return 1
+    print -r -- "$sessions" | awk -v wanted="$1" '
+        $1 == wanted && $0 !~ /EXITED/ { found = 1 }
+        END { exit !found }
+    '
+}
+
+create_project() {
+    python3 "$BIN_DIR/repo-transfer.py" init "$ROOT"
+    ensure_scratch "$ROOT"
+    [[ ! -L "$ROOT/docs" ]] || die "docs must not be a symlink"
+    mkdir -p "$ROOT/docs"/{product/{ideas,research,planning,decisions},brand/{strategy,briefs,prompts,references},marketing/{briefs,copy,campaigns},assets/projects,presentations,handoffs}
+    if [[ ! -e "$ROOT/docs/STUDIO.md" ]]; then
+        printf '# %s Studio\n\nPersistent product work belongs in docs/.\nTemporary and large generated assets belong in scratch/.\n' "$PROJECT" > "$ROOT/docs/STUDIO.md"
+    fi
+}
+
+open_project() {
+    local project="$1"
+    local dir
+    local session
+
+    project="$(slugify "$project")"
+    dir="$(project_dir "$project")"
+    session="$(python3 "$BIN_DIR/repo_sessions.py" name studio "$ROOT")" || die "cannot name Studio session"
+
+    [[ -d "$dir" ]] ||
+        die "unknown project: $project"
+
+    set_current "$project"
+    cd "$ROOT"
+
+    local live_session
+    live_session="$(python3 "$BIN_DIR/studio-session.py" "$ROOT")" || die "cannot locate Studio session"
+    # Avoid attaching to ourselves or nesting Zellij sessions.
+    if [[ -n "${ZELLIJ:-}" || -n "${ZELLIJ_SESSION_NAME:-}" ]]; then
+        if [[ "${ZELLIJ_SESSION_NAME:-}" == "$session" || ( -n "$live_session" && "${ZELLIJ_SESSION_NAME:-}" == "$live_session" ) ]]; then
+            print -r -- "Already in this repository's Studio session."
+            print -r -- "Run studio-watch to show the change dashboard in this pane."
+            return 0
+        fi
+        die "already inside another Zellij session; detach first, then run studio open from the repository"
+    fi
+
+    if [[ -n "$live_session" ]]; then
+        exec zellij attach "$live_session"
+    fi
+
+    # Clear a stale serialized session with the same name.
+    zellij delete-session "$session" >/dev/null 2>&1 || true
+
+    exec zellij -s "$session" -n "$LAYOUT"
+}
+
+new_idea() {
+    local project="$1"
+    local raw="$2"
+    local slug
+    local dir
+
+    slug="$(slugify "$raw")"
+    [[ -n "$slug" ]] || die "invalid idea name"
+
+    dir="$(project_dir "$project")/product/ideas/$slug"
+
+    [[ ! -e "$dir" ]] ||
+        die "idea already exists: $slug"
+
+    mkdir -p "$dir"
+
+    cat > "$dir/idea.md" <<EOF
+# $raw
+
+## Idea
+
+Describe the idea freely.
+
+## Problem / opportunity
+
+What prompted this?
+
+## Who benefits?
+
+TBD
+
+## Why might this matter?
+
+TBD
+
+## Questions
+
+- TBD
+
+## Possible directions
+
+- TBD
+
+## References
+
+- TBD
+
+## Status
+
+Exploring
+EOF
+
+    echo "Created idea:"
+    echo "  $dir/idea.md"
+}
+
+new_asset_project() {
+    local project="$1"
+    local raw="$2"
+    local slug
+    local dir
+
+    slug="$(slugify "$raw")"
+    [[ -n "$slug" ]] || die "invalid asset project name"
+
+    dir="$(project_dir "$project")/assets/projects/$slug"
+
+    [[ ! -e "$dir" ]] ||
+        die "asset project already exists: $slug"
+
+    mkdir -p \
+        "$dir/source" \
+        "$ROOT/scratch/assets/$slug/generated" \
+        "$dir/approved" \
+        "$dir/exports" \
+        "$ROOT/scratch/assets/$slug/tmp"
+
+    cat > "$dir/brief.md" <<EOF
+# Asset Brief — $raw
+
+## Objective
+
+What are we creating and why?
+
+## Audience
+
+TBD
+
+## Message / feeling
+
+TBD
+
+## Visual direction
+
+TBD
+
+## Must include
+
+- TBD
+
+## Must avoid
+
+- TBD
+
+## Deliverables
+
+- TBD
+
+## References
+
+- TBD
+EOF
+
+    cat > "$dir/prompts.md" <<'EOF'
+# Generation Prompts
+
+Keep visual-generation prompts and iterations here.
+
+## Prompt 1
+
+TBD
+EOF
+
+    echo "Created asset project:"
+    echo "  $dir"
+}
+
+new_handoff() {
+    local project="$1"
+    local raw="$2"
+    local slug
+    local dir
+
+    slug="$(slugify "$raw")"
+    [[ -n "$slug" ]] || die "invalid handoff name"
+
+    dir="$(project_dir "$project")/handoffs/$slug"
+
+    [[ ! -e "$dir" ]] ||
+        die "handoff already exists: $slug"
+
+    mkdir -p "$dir/assets"
+
+    cat > "$dir/brief.md" <<EOF
+# Implementation Brief — $raw
+
+## Goal
+
+What should be implemented?
+
+## Problem
+
+What problem are we solving?
+
+## Background
+
+Relevant Studio context.
+
+## Desired experience
+
+Describe the desired product/user experience.
+
+## Scope
+
+What is included?
+
+## Non-goals
+
+What is explicitly not included?
+EOF
+
+    cat > "$dir/decisions.md" <<'EOF'
+# Decisions
+
+## Product decisions
+
+- TBD
+
+## UX decisions
+
+- TBD
+
+## Technical constraints
+
+- TBD
+
+## Explicitly undecided
+
+- TBD
+EOF
+
+    cat > "$dir/acceptance.md" <<'EOF'
+# Acceptance Criteria
+
+- [ ] TBD
+
+## Validation
+
+- TBD
+EOF
+
+    cat > "$dir/references.md" <<'EOF'
+# References
+
+## Studio material
+
+- TBD
+
+## Repository material
+
+- README.md
+- DEVELOPMENT.md
+- STATUS.md
+- ARCHITECTURE.md
+- AGENTS.md
+
+## Assets
+
+Related files can be placed in `assets/`.
+EOF
+
+    echo "Created handoff:"
+    echo "  $dir"
+}
+
+build_handoff() {
+    python3 "$BIN_DIR/repo-agent.py" build studio "$(slugify "$2")"
+}
+
+show_prompt() {
+    local project="$1"
+    local slug="$2"
+    local file
+
+    slug="$(slugify "$slug")"
+    file="$(project_dir "$project")/handoffs/$slug/implementation.md"
+    [[ -f "$file" ]] || file="$(project_dir "$project")/handoffs/$slug/codex-prompt.md"
+
+    [[ -f "$file" ]] ||
+        die "prompt not built; run: studio handoff build $slug"
+
+    if command -v bat >/dev/null 2>&1; then
+        bat --style=plain "$file"
+    else
+        cat "$file"
+    fi
+}
+
+copy_prompt() {
+    local project="$1"
+    local slug="$2"
+    local file
+    local encoded
+
+    slug="$(slugify "$slug")"
+    file="$(project_dir "$project")/handoffs/$slug/implementation.md"
+    [[ -f "$file" ]] || file="$(project_dir "$project")/handoffs/$slug/codex-prompt.md"
+
+    [[ -f "$file" ]] ||
+        die "prompt not built; run: studio handoff build $slug"
+
+    # OSC52 copies through SSH/Zellij to a compatible client terminal.
+    encoded="$(base64 < "$file" | tr -d '\n')"
+    printf '\033]52;c;%s\a' "$encoded"
+
+    echo
+    echo "Copied prompt to terminal clipboard."
+}
+
+# Shared Studio/Work streams v1
+# Studio simple interface v1
+select_stream() {
+    local target
+    target="$("$BIN_DIR/work" path "$1")" ||
+        die "unknown or invalid stream: $1"
+    cd "$target" || die "cannot enter stream worktree"
+    source "$BIN_DIR/repo-context.zsh"
+}
+
+current_stream() {
+    local branch
+    branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" ||
+        die "detached HEAD; use studio open <stream>"
+    [[ "$branch" == codex/* ]] ||
+        die "use studio open <stream> first"
+    local stream="${branch#codex/}"
+
+    print -r -- "$stream"
+}
+
+# Keep previous spellings as aliases.
+case "${1:-}" in
+    new) shift; set -- open "$@" ;;
+    stop|close) shift; set -- close "$@" ;;
+    ls) shift; set -- list "$@" ;;
+    "")
+        branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+        stream="${branch#codex/}"
+
+        if [[ "$branch" == codex/* ]]; then
+            set -- open "$stream"
+        else
+            print -r -- "Studio — $PROJECT"
+            print
+            print -r -- "Streams:"
+            python3 "$BIN_DIR/studio-list.py" || exit $?
+            print
+            print -r -- "  studio herdr <stream>  Create or reopen a Herdr stream
+  studio open <stream>   Create or resume a Zellij stream"
+            print -r -- "  studio close <stream>  End its Studio session"
+            print -r -- "  studio handoff         Build the current stream's handoff"
+            print
+            print -r -- "Start by opening an existing stream or choosing a new name."
+            exit 0
+        fi
+        ;;
+esac
+
+if [[ "$1" == open ]]; then
+    stream="$(slugify "${2:-$(current_stream)}")"
+    [[ -n "$stream" ]] || die "invalid stream name"
+    agent_args=()
+    [[ -z "$agent_choice" ]] || agent_args=(--agent "$agent_choice")
+    python3 "$BIN_DIR/repo-agent.py" configure studio "$stream" "${agent_args[@]}"
+
+    if [[ ! -f "$RUNTIME/work/$REPO_ID/$stream/state.env" ]]; then
+        [[ -z "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" ]] ||
+            die "detach first, then run studio open $stream"
+    fi
+
+    # Opening may recover even when an existing runtime record is stale.
+    "$BIN_DIR/work" prepare "$stream"
+    select_stream "$stream"
+
+    if [[ -n "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" &&
+          "${ZELLIJ_SESSION_NAME:-}" != "$(python3 "$BIN_DIR/studio-session.py" "$ROOT")" ]]; then
+        die "detach first, then run studio open $stream"
+    fi
+
+    create_project
+    handoff="$ROOT/docs/handoffs/$stream"
+    [[ -d "$handoff" ]] || new_handoff "$PROJECT" "$stream"
+    [[ -f "$handoff/branch.txt" ]] ||
+        printf 'codex/%s\n' "$stream" > "$handoff/branch.txt"
+    python3 "$BIN_DIR/repo-agent.py" context studio "$stream"
+
+elif [[ "$1" == close ]]; then
+    stream="$(slugify "${2:-$(current_stream)}")"
+    [[ -n "$stream" ]] || die "invalid stream name"
+
+    # Inspect Git registration without loading or recovering Work state.
+    target="$(python3 - "$stream" <<'STUDIO_CLOSE_PATH'
+import os
+import subprocess
+import sys
+
+wanted = ('refs/heads/codex/' + sys.argv[1]).encode()
+output = subprocess.check_output(
+    ['git', 'worktree', 'list', '--porcelain', '-z']
+)
+matches = []
+for entry in output.split(b'\0\0'):
+    fields = dict(
+        line.split(b' ', 1)
+        for line in entry.split(b'\0')
+        if b' ' in line
+    )
+    if fields.get(b'branch') == wanted:
+        matches.append(os.fsdecode(fields[b'worktree']))
+
+if len(matches) > 1:
+    sys.exit('studio: multiple checkouts for this stream; nothing changed')
+if matches:
+    print(matches[0])
+STUDIO_CLOSE_PATH
+)" || die "cannot inspect existing worktrees"
+
+    if [[ -z "$target" ]]; then
+        print -r -- "No registered checkout for $stream; nothing to close."
+        exit 0
+    fi
+
+    session="$(python3 "$BIN_DIR/studio-session.py" "$target")" || die "cannot locate Studio session"
+    command -v zellij >/dev/null || die "zellij is not installed"
+
+    if [[ -n "$session" ]]; then
+        zellij kill-session "$session" || die "could not close $session"
+        print -r -- "Closed Studio session for $stream."
+    else
+        print -r -- "No active Studio session for $stream."
+    fi
+    exit 0
+
+elif [[ "$1" == handoff && $# == 1 ]]; then
+    stream="$(current_stream)"
+    select_stream "$stream"
+    set -- handoff build "$stream"
+fi
+
+case "${1:-}" in
+    new)
+        [[ -n "${2:-}" ]] || die "usage: studio new <stream>"
+        [[ -z "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" ]] ||
+            die "detach from Zellij before running studio new"
+        stream="$(slugify "$2")"
+        [[ -n "$stream" ]] || die "invalid stream name"
+        "$BIN_DIR/work" prepare "$stream"
+        select_stream "$stream"
+        create_project
+        handoff="$ROOT/docs/handoffs/$stream"
+        [[ -d "$handoff" ]] || new_handoff "$PROJECT" "$stream"
+        printf 'codex/%s\n' "$stream" > "$handoff/branch.txt"
+        open_project "$PROJECT"
+        ;;
+    init)
+        create_project
+        echo "Studio initialized: $ROOT/docs"
+        ;;
+    open|"")
+        create_project
+        open_project "$PROJECT"
+        ;;
+    ls|list)
+        python3 "$BIN_DIR/studio-list.py"
+        ;;
+    status)
+        project="$PROJECT"
+        dir="$(project_dir "$project")"
+
+        echo "$project"
+        echo
+        echo "  Path: $dir"
+        echo
+
+        echo "Git:"
+        git -C "$dir" status --short --branch 2>/dev/null || true
+
+        echo
+        echo "Ideas:"
+        find "$dir/product/ideas" -mindepth 1 -maxdepth 1 -type d 2>/dev/null |
+            wc -l | tr -d ' '
+
+        echo "Handoffs:"
+        find "$dir/handoffs" -mindepth 1 -maxdepth 1 -type d 2>/dev/null |
+            wc -l | tr -d ' '
+
+        echo "Asset projects:"
+        find "$dir/assets/projects" -mindepth 1 -maxdepth 1 -type d 2>/dev/null |
+            wc -l | tr -d ' '
+        ;;
+
+    stop|close)
+        project="$PROJECT"
+        session="$(python3 "$BIN_DIR/repo_sessions.py" name studio "$ROOT")" || die "cannot name Studio session"
+
+        session="$(python3 "$BIN_DIR/studio-session.py" "$ROOT")" || die "cannot locate Studio session"
+        [[ -z "$session" ]] || zellij kill-session "$session" 2>/dev/null || true
+        echo "Stopped $project Studio session."
+        ;;
+
+    idea)
+        create_project
+        project="$(current_project)"
+
+        case "${2:-}" in
+            new)
+                [[ -n "${3:-}" ]] ||
+                    die "usage: studio idea new <name>"
+
+                new_idea "$project" "$3"
+                ;;
+
+            *)
+                die "usage: studio idea new <name>"
+                ;;
+        esac
+        ;;
+
+    asset)
+        create_project
+        project="$(current_project)"
+
+        case "${2:-}" in
+            new)
+                [[ -n "${3:-}" ]] ||
+                    die "usage: studio asset new <name>"
+
+                new_asset_project "$project" "$3"
+                ;;
+
+            *)
+                die "usage: studio asset new <name>"
+                ;;
+        esac
+        ;;
+
+    handoff)
+        create_project
+        project="$(current_project)"
+
+        case "${2:-}" in
+            new)
+                [[ -n "${3:-}" ]] ||
+                    die "usage: studio handoff new <name>"
+
+                new_handoff "$project" "$3"
+                ;;
+
+            build)
+                [[ -n "${3:-}" ]] ||
+                    die "usage: studio handoff build <name>"
+
+                build_handoff "$project" "$3"
+                ;;
+
+            ls|list)
+                base="$(project_dir "$project")/handoffs"
+
+                printf "%-32s %-8s\n" "HANDOFF" "PROMPT"
+
+                for dir in "$base"/*(/N); do
+                    name="${dir:t}"
+
+                    if [[ -f "$dir/implementation.md" || -f "$dir/codex-prompt.md" ]]; then
+                        printf "%-32s %-8s\n" "$name" "built"
+                    else
+                        printf "%-32s %-8s\n" "$name" "-"
+                    fi
+                done
+                ;;
+
+            *)
+                die "usage: studio handoff {new|build|ls} ..."
+                ;;
+        esac
+        ;;
+
+    prompt)
+        create_project
+        project="$(current_project)"
+
+        [[ -n "${2:-}" ]] ||
+            die "usage: studio prompt <handoff>"
+
+        show_prompt "$project" "$2"
+        ;;
+
+    copy)
+        create_project
+        project="$(current_project)"
+
+        [[ -n "${2:-}" ]] ||
+            die "usage: studio copy <handoff>"
+
+        copy_prompt "$project" "$2"
+        ;;
+
+    help|-h|--help)
+        cat <<'EOF'
+studio — planning and handoffs on a shared Git stream
+
+  studio agent-prompt [stream]  Print startup context for an IDE chat
+  studio open <stream> --agent codex|claude|cursor
+
+  studio transfer <stream> <destination> [--apply]   Preview/copy into another repository
+
+  studio open <stream>     Create or resume a stream
+  studio close [stream]    End its Studio session
+  studio list              List streams in this repository
+  studio handoff           Build/update this stream's implementation prompt
+
+Inside a stream, plain studio resumes it.
+Detach to leave a session running; close ends it.
+Existing commands remain available for compatibility.
+
+EOF
+        ;;
+
+    *)
+        die "unknown command: $1 (try: studio help)"
+        ;;
+esac

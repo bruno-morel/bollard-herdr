@@ -1,0 +1,9 @@
+#!/bin/zsh
+while true; do
+    clear
+    docker compose ps --format 'table {{.Service}}\t{{.State}}' 2>/dev/null || echo 'Docker unavailable'
+    git status --short --branch 2>/dev/null | head -8
+    echo 'Any key → shell'
+    if read -k 1 -t 3 reply 2>/dev/null; then break; fi
+done
+exec zsh

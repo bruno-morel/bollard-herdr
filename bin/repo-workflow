@@ -1,0 +1,1143 @@
+#!/usr/bin/env python3
+"""Shared Studio/Work stream picker for Herdr TUI and ordinary terminals."""
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import curses
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess as sp
+import sys
+import time
+import unicodedata
+
+BIN = Path(__file__).resolve().parent
+VALID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+
+
+def machine(address):
+    return address.rsplit("/", 1)[0] if "/" in address else ""
+
+
+def label(row, key, default=""):
+    return row.get("labels", {}).get("repo-tools." + key, default)
+
+
+def slug(value):
+    return re.sub("[^a-z0-9]+", "-", value.lower()).strip("-")
+
+
+def source_tree(tree):
+    if tree.get("stream") and not tree["primary"]:
+        return dict(
+            source="tree",
+            stream=tree["stream"],
+            folder=tree["folder"],
+            checkout=tree["path"],
+        )
+    return dict(
+        source="new",
+        stream="",
+        folder="",
+        ref="refs/heads/" + tree["branch"] if tree["branch"] else None,
+    )
+
+
+def source_ref(ref):
+    name = ref.get("stream") or slug(ref["branch"].split("/")[-1])
+    return dict(
+        source="recover" if ref.get("stream") else "new",
+        stream=name,
+        folder=name,
+        ref=ref["ref"],
+    )
+
+
+def paired(names, field, value):
+    out = dict(names, **{field: value, field + "Edited": True})
+    other = "folder" if field == "stream" else "stream"
+    if not names.get(other + "Edited"):
+        out[other] = value
+    return out
+
+
+def clean(value):
+    # Repository names and errors are data, never terminal control sequences.
+    return "".join(c if c >= " " and c != "\x7f" else " " for c in str(value))
+
+
+def clipped(value, width):
+    out, used = "", 0
+    for c in clean(value):
+        size = (
+            0
+            if unicodedata.combining(c)
+            else 2 if unicodedata.east_asian_width(c) in "WF" else 1
+        )
+        if used + size > max(0, width):
+            break
+        out += c
+        used += size
+    return out
+
+
+class Backend:
+    def __init__(self):
+        self.binary = shutil.which("hc") or str(Path.home() / ".local/bin/hc")
+
+    def hc(self, *args):
+        r = sp.run(
+            [self.binary, args[0], "--json", *args[1:]],
+            capture_output=True,
+            text=True,
+            timeout=35,
+        )
+        if r.returncode:
+            raise RuntimeError(r.stderr.strip() or r.stdout.strip())
+        return json.loads(r.stdout)
+
+    def script(self, on, name, args=(), cwd=None, timeout=25):
+        # Argument arrays end-to-end. Paths, refs and names never become shell text.
+        code = 'import os,sys; from pathlib import Path; p=Path.home()/".local/bin"/sys.argv[1]; assert p.is_file(), "Studio/Work tools are not installed on this machine"; os.execv(str(p), [str(p), *sys.argv[2:]])'
+        cmd = [
+            self.binary,
+            "exec",
+            *(["--on", on] if on else []),
+            "--timeout",
+            str(timeout),
+        ]
+        if cwd:
+            cmd += ["--cwd", cwd]
+        r = sp.run(
+            [*cmd, "--", "python3", "-c", code, name, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 15,
+        )
+        if r.returncode:
+            raise RuntimeError(r.stderr.strip() or r.stdout.strip() or "Command failed")
+        return json.loads(r.stdout.strip().split("\n")[-1])
+
+    def catalog(self, on, path, fetch=False):
+        return self.script(
+            on,
+            "repo-streams.py",
+            ["fetch" if fetch else "catalog", "--repo", path],
+            timeout=120 if fetch else 25,
+        )
+
+    def describe(self, address):
+        row = self.hc("get", address)
+        if row.get("state") == "live" and label(row, "checkout"):
+            try:
+                row["project_name"] = self.catalog(
+                    machine(address), label(row, "checkout")
+                )["repo"]
+            except (OSError, RuntimeError, ValueError, sp.SubprocessError):
+                pass
+        return row
+
+    def inventory(self):
+        rows = {}
+        for role in ("studio", "work"):
+            for r in self.hc("ls", "--label", "repo-tools.role=" + role).get(
+                "terminals", []
+            ):
+                rows[r["address"]] = r
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            jobs = {pool.submit(self.describe, a): a for a in rows}
+            result = []
+            for f in as_completed(jobs):
+                try:
+                    row = f.result()
+                    if (
+                        row.get("state") == "live"
+                        and label(row, "role") in ("studio", "work")
+                        and label(row, "stream")
+                    ):
+                        result.append(row)
+                except (OSError, RuntimeError, ValueError, sp.SubprocessError):
+                    pass  # A terminal may end between ls and get.
+        return sorted(
+            result,
+            key=lambda r: (
+                machine(r["address"]),
+                label(r, "checkout"),
+                label(r, "role"),
+            ),
+        )
+
+    def verify(self, row):
+        live = self.hc("get", row["address"])
+        if live.get("state") != "live":
+            raise RuntimeError(
+                "This conversation ended. Select its worktree to reopen it."
+            )
+        data = self.catalog(
+            machine(live["address"]), label(live, "checkout") or live["cwd"]
+        )
+        if (data.get("current") or {}).get("stream") != label(live, "stream"):
+            raise RuntimeError(
+                "The conversation checkout no longer matches its stream. Refresh before continuing."
+            )
+        live["project_name"] = data["repo"]
+        return live
+
+    def prepare_and_open(
+        self, on, data, source, role, agent, progress=None, retry=False
+    ):
+        progress = progress or (lambda message: None)
+        progress("Checking existing conversation…")
+        # Reuse live conversations before touching worktree setup or agent preferences.
+        if source["source"] != "new":
+            matches = []
+            for row in self.inventory():
+                if (
+                    machine(row["address"]) == on
+                    and label(row, "role") == role
+                    and label(row, "stream") == source["stream"]
+                ):
+                    existing = self.catalog(on, label(row, "checkout") or row["cwd"])
+                    if existing["common"] == data["common"]:
+                        matches.append(row)
+            if len(matches) > 1:
+                raise RuntimeError(
+                    "Multiple conversations match this stream. Choose one from Active."
+                )
+            if matches:
+                return {"address": self.verify(matches[0])["address"]}
+        args = ["prepare", "--repo", data["primary"]]
+        for k in ("source", "stream", "folder", "checkout", "ref"):
+            if source.get(k):
+                args += ["--" + k, source[k]]
+        progress("Preparing worktree and handoff…")
+        if retry:
+            args.append("--retry")
+        prepared = self.script(on, "repo-streams.py", args, timeout=120)
+        progress("Starting agent / Docker setup…")
+        job = self.script(
+            on,
+            role,
+            ["flow", "open", source["stream"], "--role", role, "--agent", agent],
+            cwd=prepared["cwd"],
+            timeout=120,
+        )
+        return {
+            "job": job,
+            "cwd": prepared["cwd"],
+            "stream": source["stream"],
+            "role": role,
+            "on": on,
+        }
+
+    def attach(self, address):
+        if address == os.environ.get("HC_TERMINAL_ID"):
+            return
+        sp.run([self.binary, "attach", address], check=True)
+
+    def actions(self, on, path, role):
+        result = self.hc(
+            "run",
+            *(["--on", on] if on else []),
+            "--bg",
+            "--rm",
+            "--no-parent",
+            "--no-notify",
+            "--cwd",
+            path,
+            "--",
+            "python3",
+            "-c",
+            'import os,sys; from pathlib import Path; p=Path.home()/".local/bin/repo-flow.py"; os.execv(sys.executable,[sys.executable,str(p),sys.argv[1]])',
+            role,
+        )
+        address = result.get("address") or result.get("terminal", {}).get("address")
+        if not address:
+            raise RuntimeError(
+                "The workflow menu returned no address; inspect hc ls before retrying."
+            )
+        self.attach(address)
+
+
+class UI:
+    def __init__(self, screen, ascii=False):
+        self.s = screen
+        self.ascii = ascii
+        curses.curs_set(0)
+        screen.keypad(True)
+        curses.set_escdelay(30)
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            for i, c in enumerate(
+                (
+                    curses.COLOR_CYAN,
+                    curses.COLOR_GREEN,
+                    curses.COLOR_YELLOW,
+                    curses.COLOR_RED,
+                ),
+                1,
+            ):
+                curses.init_pair(i, c, -1)
+        self.context = ""
+
+    def color(self, n):
+        return (
+            curses.color_pair(n)
+            if curses.has_colors() and not os.environ.get("NO_COLOR")
+            else 0
+        )
+
+    def icon(self, s, a):
+        return a if self.ascii else s
+
+    def put(self, y, x, text, style=0):
+        h, w = self.s.getmaxyx()
+        if 0 <= y < h and 0 <= x < w:
+            try:
+                self.s.addstr(
+                    y,
+                    x,
+                    clipped(
+                        (
+                            str(text).translate(
+                                str.maketrans(
+                                    {
+                                        "●": "*",
+                                        "◉": "*",
+                                        "◆": "*",
+                                        "▣": "#",
+                                        "⌂": "@",
+                                        "☷": "=",
+                                        "⑂": "Y",
+                                        "▶": ">",
+                                        "…": ".",
+                                        "·": "|",
+                                        "↑": "^",
+                                        "↓": "v",
+                                        "×": "x",
+                                        "›": ">",
+                                    }
+                                )
+                            )
+                            if self.ascii
+                            else text
+                        ),
+                        w - x - 1,
+                    ),
+                    style,
+                )
+            except curses.error:
+                pass
+
+    def frame(self, title, hint="", footer=""):
+        self.s.erase()
+        h, w = self.s.getmaxyx()
+        self.put(1, 2, title, curses.A_BOLD | self.color(1))
+        self.put(2, 2, self.context, curses.A_DIM)
+        self.put(3, 2, self.icon("─", "-") * max(0, w - 4), curses.A_DIM)
+        self.put(4, 2, hint)
+        self.put(h - 3, 2, self.icon("─", "-") * max(0, w - 4), curses.A_DIM)
+        self.put(h - 2, 2, footer, curses.A_DIM)
+
+    def choose(self, title, rows, hint="", keys=None, selected=0):
+        """Rows: (opaque value, concise title, details). Long paths only in details."""
+        keys = keys or {}
+        query = ""
+        index = selected
+        while True:
+            filtered = [r for r in rows if query.lower() in (r[1] + " " + r[2]).lower()]
+            index = max(0, min(index, len(filtered) - 1))
+            h, w = self.s.getmaxyx()
+            self.frame(
+                title,
+                hint,
+                (
+                    (
+                        "↑↓ Enter · / filter · Esc back"
+                        if w < 52
+                        else "↑↓ move · Enter choose · / filter · Esc back"
+                    )
+                    if not self.ascii
+                    else (
+                        "Up/Down Enter / Esc"
+                        if w < 52
+                        else "Up/Down move | Enter choose | / filter | Esc back"
+                    )
+                ),
+            )
+            if h < 16 or w < 32:
+                self.put(6, 2, "Needs 32 columns × 16 rows.")
+            else:
+                self.put(5, 2, ("Filter: " + query) if query else "")
+                count = max(1, h - 12)
+                start = max(0, min(index - count // 2, len(filtered) - count))
+                for i, row in enumerate(filtered[start : start + count], start):
+                    active = i == index
+                    self.put(
+                        6 + i - start,
+                        2,
+                        (
+                            "› "
+                            if active and not self.ascii
+                            else "> " if active else "  "
+                        )
+                        + row[1],
+                        (curses.A_REVERSE | curses.A_BOLD) if active else 0,
+                    )
+                if not filtered:
+                    self.put(6, 2, "No matching entries.", curses.A_DIM)
+                if filtered:
+                    detail = filtered[index][2]
+                    self.put(h - 5, 2, detail, curses.A_DIM)
+                    self.put(h - 4, 2, f"{index+1} / {len(filtered)}", self.color(1))
+            self.s.refresh()
+            key = self.s.get_wch()
+            if key == curses.KEY_MOUSE:
+                try:
+                    _, mx, my, _, flags = curses.getmouse()
+                except curses.error:
+                    continue
+                if flags & getattr(curses, "BUTTON4_PRESSED", 0):
+                    index = max(0, index - 1)
+                elif flags & getattr(curses, "BUTTON5_PRESSED", 0):
+                    index = min(len(filtered) - 1, index + 1)
+                elif (
+                    h >= 16
+                    and w >= 32
+                    and flags & (curses.BUTTON1_RELEASED | curses.BUTTON1_CLICKED)
+                ):
+                    chosen = start + my - 6
+                    if (
+                        2 <= mx < w - 2
+                        and 6 <= my < 6 + count
+                        and chosen < len(filtered)
+                    ):
+                        return filtered[chosen][0]
+                continue
+            if key in ("\x1b", "\x03"):
+                return None
+            if key == curses.KEY_RESIZE:
+                continue
+            if key in (curses.KEY_DOWN, "j"):
+                index = min(index + 1, len(filtered) - 1)
+            elif key in (curses.KEY_UP, "k"):
+                index = max(0, index - 1)
+            elif key == curses.KEY_NPAGE:
+                index = min(index + max(1, h - 12), len(filtered) - 1)
+            elif key == curses.KEY_PPAGE:
+                index = max(0, index - max(1, h - 12))
+            elif key in ("\n", "\r", curses.KEY_ENTER) and filtered:
+                return filtered[index][0]
+            elif key == "/":
+                result = self.input("Filter", query)
+                if result is not None:
+                    query = result
+                    index = 0
+            elif key in keys:
+                return keys[key]
+
+    def input(self, title, initial=""):
+        value = initial
+        while True:
+            self.frame(
+                title,
+                "Edit the value below.",
+                "Enter accept · Esc cancel · Ctrl+U clear",
+            )
+            self.put(6, 2, value or " ", curses.A_REVERSE)
+            self.s.refresh()
+            key = self.s.get_wch()
+            if key in ("\x1b", "\x03"):
+                return None
+            if key in ("\n", "\r", curses.KEY_ENTER):
+                return value.strip()
+            if key in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+                value = value[:-1]
+            elif key == "\x15":
+                value = ""
+            elif isinstance(key, str) and key.isprintable():
+                value += key
+
+    def message(self, title, text):
+        import textwrap
+
+        lines = []
+        for line in str(text).splitlines():
+            lines.extend(
+                textwrap.wrap(clean(line), max(20, self.s.getmaxyx()[1] - 6)) or [""]
+            )
+        self.choose(
+            title, [(i, line, "") for i, line in enumerate(lines)], "Esc to return"
+        )
+
+    def busy(self, title, fn):
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            started = time.monotonic()
+            self.progress_text = ""
+            f = pool.submit(fn)
+            self.s.timeout(100)
+            try:
+                while not f.done():
+                    self.frame(
+                        title,
+                        (self.progress_text or "Working…")
+                        + " · "
+                        + str(int(time.monotonic() - started))
+                        + "s",
+                        "Existing conversations keep running.",
+                    )
+                    self.s.refresh()
+                    self.s.getch()
+                return f.result()
+            finally:
+                self.s.timeout(-1)
+
+    def outside(self, fn):
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            return fn()
+        finally:
+            curses.reset_prog_mode()
+            self.s.clear()
+            self.s.refresh()
+
+
+class Picker:
+    def __init__(self, b, ui, args):
+        self.b = b
+        self.ui = ui
+        self.on = args.machine or ""
+        self.path = args.repo
+        self.role = args.role
+        self.data = None
+        self.active = []
+        self.rows = []
+        self.machine_explicit = args.machine is not None
+        self.select_only = getattr(args, "select_only", False)
+        self.result = None
+        self.current = getattr(args, "current", None)
+
+    def refresh(self):
+        self.active = self.b.inventory()
+        if not self.machine_explicit and not self.data and self.active:
+            self.on = machine(self.active[0]["address"])
+        if self.path:
+            path = self.path
+            self.path = None
+            self.data = self.b.catalog(self.on, path)
+
+    def project(self):
+        machines = self.b.hc("machine", "ls").get("machines", [])
+        choices = [("", "⌂ This computer", "Repositories on this machine")] + [
+            (m["name"], "▣ " + m["name"], m.get("state", ""))
+            for m in machines
+            if not m.get("temporary")
+        ]
+        on = self.ui.choose(
+            "Repository · machine", choices, "Choose where the files live"
+        )
+        if on is None:
+            return False
+        listed = self.ui.busy(
+            "Finding repository folders…", lambda: self.b.hc("ls", "--all")
+        ).get("terminals", [])
+        paths = list(
+            dict.fromkeys(
+                [
+                    label(r, "checkout") or r.get("cwd")
+                    for r in self.active
+                    if machine(r["address"]) == on
+                ]
+                + [
+                    r.get("cwd")
+                    for r in reversed(listed)
+                    if machine(r["address"]) == on
+                ]
+            )
+        )
+
+        def catalogs():
+            result = {}
+            for path in [p for p in paths if p][:12]:
+                try:
+                    d = self.b.catalog(on, path)
+                    result[d["common"]] = d
+                except (RuntimeError, OSError, ValueError, sp.SubprocessError):
+                    continue
+            return list(result.values())
+
+        known = self.ui.busy("Finding repositories…", catalogs)
+        options = [(d, d["repo"], d["primary"]) for d in known] + [
+            (
+                "path",
+                "+ Choose another repository",
+                "Enter an absolute folder path on this machine",
+            )
+        ]
+        chosen = self.ui.choose("Repository", options, on or "This computer")
+        if chosen is None:
+            return False
+        if chosen == "path":
+            path = self.ui.input("Repository folder")
+            if not path:
+                return False
+            chosen = self.ui.busy(
+                "Reading Git metadata…", lambda: self.b.catalog(on, path)
+            )
+        self.on = on
+        self.machine_explicit = True
+        self.data = chosen
+        return True
+
+    def ensure_project(self):
+        if self.data:
+            return True
+        rows = [r for r in self.active if machine(r["address"]) == self.on]
+        if rows:
+            self.data = self.ui.busy(
+                "Reading repository…",
+                lambda: self.b.catalog(
+                    self.on, label(rows[0], "checkout") or rows[0]["cwd"]
+                ),
+            )
+            return True
+        return self.project()
+
+    def attach(self, row):
+        live = self.ui.busy("Checking conversation…", lambda: self.b.verify(row))
+        self.deliver(live["address"])
+
+    def deliver(self, address):
+        if self.select_only:
+            self.result = self.b.hc("get", address)
+        else:
+            self.ui.outside(lambda: self.b.attach(address))
+
+    def branch(self, source):
+        rows = [
+            (r, r["label"], "Remote · last fetched" if r["remote"] else "Local branch")
+            for r in self.data["refs"]
+        ]
+        chosen = self.ui.choose(
+            "⑂ Branch",
+            rows,
+            "f Fetch latest remote references",
+            keys={"f": "@fetch"},
+            selected=next(
+                (i for i, r in enumerate(rows) if r[0]["ref"] == source.get("ref")), 0
+            ),
+        )
+        if chosen == "@fetch":
+            self.data = self.ui.busy(
+                "Fetching branches…",
+                lambda: self.b.catalog(self.on, self.data["primary"], True),
+            )
+            return self.branch(source)
+        return chosen
+
+    def confirm(self, source):
+        names = {"stream": source.get("stream", ""), "folder": source.get("folder", "")}
+        agent = "codex"
+        role = self.role
+        advanced = False
+        while True:
+            self.ui.context = (self.on or "This computer") + " / " + self.data["repo"]
+            isnew = source["source"] == "new"
+            istree = source["source"] == "tree"
+            rows = [
+                (
+                    "role",
+                    "◉ " + role.title() + "  ▾",
+                    "Studio: planning and handoffs · Work: implementation and Docker",
+                ),
+                (
+                    "project",
+                    "⌂ "
+                    + (self.on or "This computer")
+                    + " / "
+                    + self.data["repo"]
+                    + "  ▾",
+                    "Change machine or repository",
+                ),
+                (
+                    "source",
+                    "▣ "
+                    + {
+                        "new": "New stream",
+                        "tree": "Existing worktree",
+                        "recover": "Existing branch",
+                    }[source["source"]]
+                    + "  ▾",
+                    "New from main, an existing checkout, or a local/remote branch",
+                ),
+            ]
+            if istree:
+                rows += [
+                    (
+                        "source",
+                        "Worktree  " + names["stream"] + "  ▾",
+                        source["checkout"],
+                    )
+                ]
+            else:
+                rows += [
+                    (
+                        "branch",
+                        "⑂ "
+                        + str(source.get("ref") or "Choose base branch")
+                        .replace("refs/remotes/", "")
+                        .replace("refs/heads/", "")
+                        + "  ▾",
+                        "Committed source files only; fetch is available inside the branch picker",
+                    )
+                ]
+                if isnew:
+                    rows += [
+                        (
+                            "stream",
+                            "Stream  " + (names["stream"] or "Choose a name…"),
+                            "Branch and worktree folder follow this name",
+                        )
+                    ]
+            rows += [
+                (
+                    "advanced",
+                    "⚙ Customize  ▾" if not advanced else "⚙ Less customization  ▴",
+                    "Agent and worktree folder override",
+                )
+            ]
+            if advanced:
+                rows += [
+                    (
+                        "agent",
+                        "Agent   " + agent + "  ▾",
+                        "Codex or Cursor. No Claude usage.",
+                    )
+                ]
+                if not istree:
+                    rows += [
+                        (
+                            "folder",
+                            "Folder  " + (names["folder"] or "…"),
+                            self.data["worktree_parent"] + "/" + names["folder"],
+                        )
+                    ]
+            rows += [
+                (
+                    "open",
+                    "▶ " + ("Create stream" if isnew else "Open " + names["stream"]),
+                    "Creates or resumes only after choosing this row.",
+                )
+            ]
+            action = self.ui.choose(
+                "New conversation",
+                rows,
+                "e Existing conversation · Esc back",
+                keys={"e": "@existing"},
+            )
+            if action is None or action == "@existing":
+                return
+            if action == "role":
+                choice = self.ui.choose(
+                    "Role",
+                    [
+                        ("studio", "◉ Studio", "Planning · docs · handoffs"),
+                        ("work", "◆ Work", "Implementation · tests · Docker"),
+                    ],
+                    selected=0 if role == "studio" else 1,
+                )
+                if choice:
+                    role = choice
+            elif action == "project":
+                if self.project():
+                    source = dict(source="new", ref=self.data["default"])
+                    names = {"stream": "", "folder": ""}
+            elif action == "source":
+                choice = self.ui.choose(
+                    "Start from",
+                    [
+                        (
+                            "new",
+                            "+ New stream",
+                            "Start from the repository default branch",
+                        ),
+                        ("tree", "▣ Existing worktree", "Reuse a registered checkout"),
+                        ("ref", "⑂ Existing branch", "Recover local or remote streams"),
+                    ],
+                )
+                if choice == "new":
+                    source = dict(source="new", ref=self.data["default"])
+                    names = {"stream": "", "folder": ""}
+                elif choice == "tree":
+                    tree = self.ui.choose(
+                        "Worktree",
+                        [
+                            (
+                                r,
+                                r.get("stream") or r.get("branch") or "Detached",
+                                r["path"],
+                            )
+                            for r in self.data["trees"]
+                            if not r["primary"]
+                        ],
+                    )
+                    if tree:
+                        if not tree["available"]:
+                            self.ui.message(
+                                "Unavailable", "Restore this checkout first."
+                            )
+                            continue
+                        source = source_tree(tree)
+                        names = {k: source.get(k, "") for k in ("stream", "folder")}
+                elif choice == "ref":
+                    ref = self.branch(source)
+                    if ref:
+                        source = source_ref(ref)
+                        names = {k: source.get(k, "") for k in ("stream", "folder")}
+            elif action == "branch":
+                ref = self.branch(source)
+                if ref:
+                    if source["source"] == "recover":
+                        source = source_ref(ref)
+                        names = {k: source.get(k, "") for k in ("stream", "folder")}
+                    else:
+                        source = dict(source, ref=ref["ref"])
+            elif action == "advanced":
+                advanced = not advanced
+            elif action == "agent":
+                choice = self.ui.choose(
+                    "Agent",
+                    [
+                        ("codex", "Codex", "Uses your connected account"),
+                        ("cursor", "Cursor", "Uses your connected account"),
+                    ],
+                    selected=0 if agent == "codex" else 1,
+                )
+                if choice:
+                    agent = choice
+            elif action in ("stream", "folder"):
+                text = self.ui.input(action.title() + " name", names[action])
+                if text is not None:
+                    if not VALID.fullmatch(text):
+                        self.ui.message(
+                            "Name needed", "Use lowercase words separated by hyphens."
+                        )
+                        continue
+                    names = paired(names, action, text)
+            elif action == "open":
+                if not VALID.fullmatch(names["stream"]) or not VALID.fullmatch(
+                    names["folder"]
+                ):
+                    self.ui.message("Name needed", "Choose a stream name first.")
+                    continue
+                if not istree and not source.get("ref"):
+                    self.ui.message("Base needed", "Choose a branch first.")
+                    continue
+                retry = False
+                while True:
+                    try:
+                        result = self.ui.busy(
+                            "Preparing " + names["stream"] + "…",
+                            lambda: self.b.prepare_and_open(
+                                self.on,
+                                self.data,
+                                {
+                                    **source,
+                                    **{k: names[k] for k in ("stream", "folder")},
+                                },
+                                role,
+                                agent,
+                                lambda message: setattr(
+                                    self.ui, "progress_text", message
+                                ),
+                                retry=retry,
+                            ),
+                        )
+                        break
+                    except (RuntimeError, OSError, ValueError, sp.SubprocessError) as e:
+                        curses.beep()
+                        if (
+                            self.ui.choose(
+                                "Stream setup failed",
+                                [
+                                    (
+                                        "retry",
+                                        "Retry unfinished setup",
+                                        "Keep the existing worktree and conversation",
+                                    ),
+                                    ("back", "Back", "Leave existing work intact"),
+                                ],
+                                str(e),
+                            )
+                            != "retry"
+                        ):
+                            return
+                        retry = True
+                self.role = role
+                if result.get("address"):
+                    self.deliver(result["address"])
+                    return
+                self.wait_setup(result)
+                return
+
+    def wait_setup(self, result):
+        job = result["job"]
+        on = result["on"]
+        address = job.get("terminal")
+        if address and on and "/" not in address:
+            address = on + "/" + address
+        # Opening uses the desktop controller. Observe it without sending prompts.
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            state = self.ui.busy(
+                "Opening " + result["stream"] + "…",
+                lambda: self.b.script(
+                    on,
+                    result["role"],
+                    ["flow", "status", result["stream"]],
+                    cwd=result["cwd"],
+                ),
+            )
+            if state.get("terminal") and state["terminal"] != job.get("terminal"):
+                self.ui.message(
+                    "Workflow changed",
+                    "Another workflow now owns this stream. Choose its conversation from Active.",
+                )
+                return
+            if state.get("state") == "ready" and state.get("lead"):
+                lead = state["lead"]
+                lead = (on + "/" + lead) if on and "/" not in lead else lead
+                curses.beep()
+                self.deliver(lead)
+                return
+            if state.get("state") not in ("queued", "preparing"):
+                curses.beep()
+                if (
+                    state.get("state") == "needs-you"
+                    and state.get("action") == "open"
+                    and self.ui.choose(
+                        "Setup needs attention",
+                        [
+                            (
+                                "retry",
+                                "Retry unfinished setup",
+                                "Reuse checkout and any existing agent",
+                            ),
+                            ("back", "Back", "Keep the stream"),
+                        ],
+                        state.get("message", "Inspect the Workflow terminal."),
+                    )
+                    == "retry"
+                ):
+                    result["job"] = self.ui.busy(
+                        "Retrying stream setup…",
+                        lambda: self.b.script(
+                            on,
+                            result["role"],
+                            [
+                                "flow",
+                                "open",
+                                result["stream"],
+                                "--retry-token",
+                                state["token"],
+                            ],
+                            cwd=result["cwd"],
+                        ),
+                    )
+                    return self.wait_setup(result)
+                return
+            self.ui.frame(
+                "Opening " + result["stream"],
+                state.get("message", "Preparing…"),
+                "Esc returns to the picker; setup keeps running.",
+            )
+            self.ui.s.refresh()
+            self.ui.s.timeout(1000)
+            try:
+                if self.ui.s.getch() == 27:
+                    return
+            finally:
+                self.ui.s.timeout(-1)
+        self.ui.message(
+            "Setup still running",
+            "The stream is preserved. Choose it from Active when ready. Workflow terminal: "
+            + str(address),
+        )
+
+    def run(self):
+        try:
+            self.ui.busy("Loading streams…", self.refresh)
+        except (RuntimeError, OSError, ValueError, sp.SubprocessError) as e:
+            self.ui.message("Could not load streams", str(e))
+        selected = (
+            next((r for r in self.active if r["address"] == self.current), None)
+            or next(
+                (
+                    r
+                    for r in self.active
+                    if label(r, "role") == self.role
+                    and (not self.data or label(r, "checkout") == self.data["root"])
+                ),
+                None,
+            )
+            or (self.active[0] if self.active else None)
+        )
+        while self.result is None:
+            try:
+                self.ui.context = (
+                    (
+                        selected.get("project_name", "")
+                        + " / "
+                        + label(selected, "stream")
+                    )
+                    if selected
+                    else ""
+                )
+                rows = [
+                    (
+                        "pick",
+                        "● "
+                        + (
+                            label(selected, "stream") + " · " + label(selected, "role")
+                            if selected
+                            else "Choose a conversation"
+                        )
+                        + "  ▾",
+                        (
+                            (machine(selected["address"]) or "This computer")
+                            + " · "
+                            + label(selected, "checkout")
+                            if selected
+                            else "Active streams from every connected machine"
+                        ),
+                    )
+                ]
+                if selected:
+                    rows += [
+                        (
+                            "open",
+                            "▶ Open conversation",
+                            "Same process, role, model and saved prompt. No new agent.",
+                        )
+                    ]
+                rows += [
+                    (
+                        "new",
+                        "+ New conversation",
+                        "Open an existing worktree or branch, or create a stream from main",
+                    )
+                ]
+                chosen = self.ui.choose(
+                    "Existing conversation",
+                    rows,
+                    "e Existing  ·  n New  ·  r Refresh",
+                    keys={"e": "pick", "n": "new", "2": "new", "r": "refresh"},
+                )
+                if chosen is None:
+                    return
+                if chosen == "refresh":
+                    self.ui.busy("Refreshing streams…", self.refresh)
+                    selected = next(
+                        (
+                            r
+                            for r in self.active
+                            if selected and r["address"] == selected["address"]
+                        ),
+                        None,
+                    )
+                    continue
+                if chosen == "pick":
+                    picked = self.ui.choose(
+                        "Active conversations",
+                        [
+                            (
+                                r,
+                                (r.get("project_name", "") + " / ")
+                                + label(r, "stream")
+                                + " · "
+                                + label(r, "role"),
+                                (machine(r["address"]) or "This computer")
+                                + " · "
+                                + label(r, "checkout"),
+                            )
+                            for r in self.active
+                        ],
+                        selected=next(
+                            (
+                                i
+                                for i, r in enumerate(self.active)
+                                if selected and r["address"] == selected["address"]
+                            ),
+                            0,
+                        ),
+                    )
+                    if picked:
+                        selected = picked
+                elif chosen == "open":
+                    self.attach(selected)
+                elif chosen == "new":
+                    if selected and not self.data:
+                        self.on = machine(selected["address"])
+                        self.data = self.ui.busy(
+                            "Reading repository…",
+                            lambda: self.b.catalog(
+                                self.on, label(selected, "checkout")
+                            ),
+                        )
+                    if self.ensure_project():
+                        self.confirm(
+                            dict(
+                                source="new",
+                                stream="",
+                                folder="",
+                                ref=self.data["default"],
+                            )
+                        )
+            except (RuntimeError, OSError, ValueError, sp.SubprocessError) as e:
+                self.ui.message("Could not open stream", str(e))
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--machine", help="Saved hc machine name; local for this computer")
+    p.add_argument("--repo", help="Repository path on that machine")
+    p.add_argument("--role", choices=("studio", "work"), default="studio")
+    p.add_argument(
+        "--ascii", action="store_true", help="Use plain characters instead of icons"
+    )
+    p.add_argument(
+        "--actions", action="store_true", help="Open the existing workflow actions menu"
+    )
+    a = p.parse_args()
+    a.machine = "" if a.machine == "local" else a.machine
+    if not sys.stdin.isatty():
+        p.error("Open this picker in an interactive terminal.")
+    backend = Backend()
+
+    def run(s):
+        ui = UI(s, a.ascii)
+        picker = Picker(backend, ui, a)
+        if a.actions:
+            if a.repo:
+                ui.outside(lambda: backend.actions(a.machine or "", a.repo, a.role))
+            elif picker.project():
+                ui.outside(
+                    lambda: backend.actions(picker.on, picker.data["primary"], a.role)
+                )
+        else:
+            picker.run()
+
+    try:
+        curses.wrapper(run)
+    except KeyboardInterrupt:
+        pass
+    except (RuntimeError, OSError, ValueError, sp.SubprocessError, curses.error) as e:
+        sys.exit("Streams: " + str(e))
+
+
+if __name__ == "__main__":
+    main()

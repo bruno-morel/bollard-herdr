@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import re
+import shlex
+import shutil
+import subprocess as sp
+import sys
+import time
+import urllib.request
+
+MD = {'.md', '.markdown', '.mdown', '.mkd'}
+SELF = shlex.join([sys.executable, str(Path(__file__).resolve())])
+
+
+def fail(message):
+    raise RuntimeError(message)
+
+
+def git(*args):
+    return sp.check_output(
+        ['git', '--no-optional-locks', *args], stderr=sp.DEVNULL
+    )
+
+
+def write_json(path, value):
+    tmp = path.with_name(path.name + '.' + secrets.token_hex(6))
+    tmp.write_text(json.dumps(value))
+    tmp.replace(path)
+
+
+def read_json(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def file_at(name):
+    path = (ROOT / name).resolve()
+    if ROOT not in path.parents or not path.is_file():
+        fail('file must exist inside this checkout: ' + name)
+    return path
+
+
+def listing():
+    def names(*args):
+        return {os.fsdecode(p) for p in git(*args).split(b'\0') if p}
+
+    def markdown(paths):
+        return sorted(
+            p for p in paths if Path(p).suffix.lower() in MD
+            and Path(p).is_file() and not Path(p).is_symlink()
+        )
+
+    new = names('ls-files', '--others', '--exclude-standard', '-z')
+    changed = markdown(
+        new | names('diff', '--name-only', '-z')
+        | names('diff', '--cached', '--name-only', '-z')
+    )
+    chosen = changed or markdown(new | names('ls-files', '--cached', '-z'))
+    wanted = read_json(STATE / 'request.json').get('path')
+    if wanted:
+        try:
+            file_at(wanted)
+            chosen = [wanted] + [p for p in chosen if p != wanted]
+        except RuntimeError:
+            pass
+    return b''.join(os.fsencode('./' + p) + b'\0' for p in chosen)
+
+
+def preview(name):
+    path = file_at(name)
+    if path.suffix.lower() in MD:
+        sp.run([
+            'glow', '-s', 'light',
+            '-w', os.environ.get('FZF_PREVIEW_COLUMNS', '80'),
+            '--', str(path)
+        ], env=dict(os.environ, PAGER='cat'), check=True)
+    else:
+        data = path.read_bytes()
+        if b'\0' in data[:8192]:
+            print('Binary file; this reader displays text files.')
+            return
+        for number, line in enumerate(
+            data.decode('utf-8', errors='replace').splitlines(), 1
+        ):
+            clean = ''.join(
+                c if c == '\t' or c.isprintable() else '?' for c in line
+            )
+            print(f'{number:4}  {clean}')
+
+
+def show(name):
+    if not SESSION:
+        fail('--show must run inside the agent’s Zellij session')
+    path = file_at(name)
+    with path.open('rb') as f:
+        if b'\0' in f.read(8192):
+            fail('READ supports text files, not binary files')
+
+    record = read_json(STATE / 'reader.json')
+    if (
+        not record or record.get('session') != SESSION
+        or record.get('root') != str(ROOT)
+    ):
+        fail('restart repo-read in this session’s READ pane once, then retry')
+    try:
+        os.kill(int(record['pid']), 0)
+    except (OSError, ValueError, KeyError):
+        fail('READ is no longer running; restart it in the READ pane')
+
+    relative = str(path.relative_to(ROOT))
+    write_json(STATE / 'request.json', {'path': relative})
+    request = urllib.request.Request(
+        'http://127.0.0.1:' + str(int(record['port'])) + '/',
+        data=('clear-query+reload(' + SELF + ' --list)').encode(),
+        headers={'x-api-key': record['key']},
+        method='POST'
+    )
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=3) as response:
+            response.read()
+    except OSError:
+        fail('READ did not respond; restart that reader and retry')
+
+    command = ['zellij', '--session', SESSION, 'action']
+    result = sp.run(
+        command + ['focus-pane-id', record['pane']], capture_output=True
+    )
+    if result.returncode:
+        result = sp.run(
+            command + ['go-to-tab-name', 'READ'], capture_output=True
+        )
+    if result.returncode:
+        fail('file sent, but tab switch failed; select READ manually')
+    print('Sent to READ: ' + relative)
+
+
+def serve():
+    for tool in ('fzf', 'glow'):
+        if not shutil.which(tool):
+            fail('install dependencies: brew install fzf glow')
+    if SESSION and not os.environ.get('ZELLIJ_PANE_ID'):
+        fail('cannot identify this pane; launch the reader in READ')
+
+    with (STATE / 'reader.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail('a reader already runs in this session and checkout; use its READ pane')
+
+        key = secrets.token_hex(32)
+        env = dict(
+            os.environ, FZF_DEFAULT_OPTS='', SHELL='/bin/sh',
+            FZF_API_KEY=key, REPO_READ_PID=str(os.getpid())
+        )
+        env.pop('FZF_DEFAULT_OPTS_FILE', None)
+        args = [
+            'fzf', '--read0', '--layout=reverse', '--color=light',
+            '--border', '--no-sort',
+            '--header=Changed files first | Enter: expand | Alt-R: refresh | Alt-B: browse | Ctrl-C: exit',
+            '--preview', SELF + ' --preview {}',
+            '--preview-window=up,75%,wrap',
+            '--bind=esc:ignore,ctrl-c:abort,pgup:preview-page-up,pgdn:preview-page-down',
+            '--bind=enter:change-preview-window(up,95%,wrap|up,75%,wrap)',
+            '--bind=double-click:change-preview-window(up,95%,wrap|up,75%,wrap)',
+            '--bind=alt-r:reload(' + SELF + ' --list)+refresh-preview',
+            '--bind=alt-b:reload(' + SELF + ' --browse)+clear-query',
+            '--bind=load:first+refresh-preview'
+        ]
+        if SESSION:
+            args += [
+                '--listen=127.0.0.1:0',
+                '--bind=start:execute-silent(' + SELF + ' --register)'
+            ]
+        try:
+            result = sp.run(args, input=listing(), env=env)
+            if result.returncode not in (0, 1, 130):
+                fail('reader exited with code ' + str(result.returncode))
+        finally:
+            record = STATE / 'reader.json'
+            if read_json(record).get('key') == key:
+                record.unlink(missing_ok=True)
+
+
+# Herdr READ bridge v1. Labels carry requests; file contents stay out of core metadata.
+HERDR_LIMIT = 512 * 1024
+
+
+def herdr_file(name):
+    relative = Path(name)
+    if relative.is_absolute() or '..' in relative.parts or not relative.parts:
+        fail('use a repository-relative file path without ..')
+    path = ROOT
+    for part in relative.parts:
+        path /= part
+        if path.is_symlink():
+            fail('Herdr READ does not follow symlinks: ' + name)
+    path = file_at(name)
+    with path.open('rb') as f:
+        data = f.read(HERDR_LIMIT + 1)
+    if len(data) > HERDR_LIMIT:
+        fail('Herdr READ supports text files up to 512 KiB')
+    if b'\0' in data:
+        fail('Herdr READ supports text files, not binary files')
+    try:
+        content = data.decode('utf-8')
+    except UnicodeDecodeError:
+        fail('Herdr READ requires UTF-8 text')
+    return {'root': str(ROOT), 'path': str(path.relative_to(ROOT)), 'text': content}
+
+
+def hc_json(*args):
+    p = sp.run(['hc', *args, '--json'], capture_output=True, text=True, timeout=5)
+    if p.returncode:
+        fail(p.stderr.strip() or p.stdout.strip() or 'hc command failed')
+    return json.loads(p.stdout)
+
+
+def herdr_show(name):
+    document = herdr_file(name)
+    terminal = os.environ['HC_TERMINAL_ID']
+    record = hc_json('get', terminal)
+    if record.get('state') != 'live':
+        fail('the current Herdr terminal is no longer live')
+    # The launcher's checkout label survives agent exit/update and identifies the stream.
+    expected = record.get('labels', {}).get('repo-tools.checkout') or record.get('cwd')
+    if not expected or not os.path.samefile(expected, ROOT):
+        fail('this Herdr terminal belongs to a different checkout; open the correct stream')
+    request = dict(v=1, id=secrets.token_hex(12), root=str(ROOT),
+                   path=document['path'], time=time.time_ns() // 1_000_000)
+    hc_json('label', terminal, 'repo-read.request=' + json.dumps(request, separators=(',', ':')))
+    # Acknowledge only a successful viewer load. An inactive/closed app leaves a queued request.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        record = hc_json('get', terminal)
+        try:
+            result = json.loads(record.get('labels', {}).get('repo-read.result', '{}'))
+        except ValueError:
+            result = {}
+        if result.get('id') == request['id']:
+            if result.get('status') == 'shown':
+                place = 'TUI ' if result.get('viewer') == 'tui' else ''
+                view = 'Docs' if Path(document['path']).suffix.lower() in MD | {'.txt'} else 'Files'
+                print('Opened in Herdr ' + place + view + ': ' + document['path'])
+                return
+            if result.get('status') == 'error':
+                fail('Herdr READ: ' + result.get('message', 'cannot display this file'))
+        time.sleep(0.2)
+    print('Queued for Herdr Docs/Files: ' + document['path'])
+    print('Select this conversation in the Herdr desktop or Studio/Work TUI to view it.')
+
+
+def herdr_request(terminal, request_id):
+    if not re.fullmatch(r't[a-z0-9]+', terminal) or not re.fullmatch(r'[a-f0-9]{24}', request_id):
+        fail('invalid terminal or file request')
+    record = hc_json('get', terminal)
+    expected = record.get('labels', {}).get('repo-tools.checkout') or record.get('cwd')
+    if record.get('state') != 'live' or not expected or not os.path.samefile(expected, ROOT):
+        fail('this file request belongs to another checkout or an ended conversation')
+    request = json.loads(record.get('labels', {}).get('repo-read.request', '{}'))
+    if not isinstance(request, dict) or request.get('v') != 1 or request.get('id') != request_id:
+        fail('this file request was superseded; select the latest request')
+    if not isinstance(request.get('root'), str) or not os.path.samefile(request['root'], ROOT):
+        fail('the requested file belongs to another checkout')
+    if not isinstance(request.get('path'), str):
+        fail('invalid file path')
+    return dict(herdr_file(request['path']), request_id=request_id)
+
+
+def main():
+    global ROOT, SESSION, STATE
+    args = sys.argv[1:]
+    if args in (['--help'], ['-h']):
+        print('repo-read --show <repository-relative-file>')
+        print('Open in Herdr desktop/TUI Docs or Files when inside hc; otherwise use Zellij READ.')
+        return
+    os.umask(0o077)
+    try:
+        ROOT = Path(
+            os.fsdecode(git('rev-parse', '--show-toplevel')).rstrip('\n')
+        ).resolve()
+    except sp.CalledProcessError:
+        fail('run inside a Git-controlled source tree')
+    os.chdir(ROOT)
+    if len(args) == 3 and args[0] == '--herdr-request':
+        print(json.dumps(herdr_request(args[1], args[2])))
+        return
+    if len(args) == 2 and args[0] == '--herdr-read':
+        print(json.dumps(herdr_file(args[1])))
+        return
+    if len(args) == 2 and args[0] == '--show' and os.environ.get('HC_TERMINAL_ID'):
+        herdr_show(args[1])
+        return
+    SESSION = os.environ.get('ZELLIJ_SESSION_NAME', '')
+    runtime = (
+        Path(os.environ.get(
+            'XDG_STATE_HOME', str(Path.home() / '.local/state')
+        )) / 'repo-tools' / 'read'
+    ).resolve()
+
+    for field in git('worktree', 'list', '--porcelain', '-z').split(b'\0'):
+        if field.startswith(b'worktree '):
+            tree = Path(os.fsdecode(field[9:])).resolve()
+            if tree == runtime or tree in runtime.parents:
+                fail('runtime state must be outside repository worktrees')
+
+    identity = hashlib.sha256(
+        os.fsencode(str(ROOT) + '\0' + SESSION)
+    ).hexdigest()[:24]
+    STATE = runtime / identity
+    STATE.mkdir(parents=True, exist_ok=True)
+    args = sys.argv[1:]
+
+    if args == ['--register']:
+        write_json(STATE / 'reader.json', dict(
+            port=int(os.environ['FZF_PORT']),
+            key=os.environ['FZF_API_KEY'],
+            pid=int(os.environ['REPO_READ_PID']),
+            pane=os.environ['ZELLIJ_PANE_ID'],
+            root=str(ROOT), session=SESSION
+        ))
+    elif args in (['--list'], ['--browse']):
+        if args == ['--browse']:
+            (STATE / 'request.json').unlink(missing_ok=True)
+        sys.stdout.buffer.write(listing())
+    elif len(args) == 2 and args[0] == '--preview':
+        preview(args[1])
+    elif len(args) == 2 and args[0] == '--show':
+        show(args[1])
+    elif not args:
+        serve()
+    else:
+        fail('usage: repo-read [--show <repository-relative-file>]')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except (RuntimeError, OSError, ValueError, KeyError, sp.CalledProcessError, sp.TimeoutExpired) as exc:
+        sys.exit('READ: ' + str(exc))

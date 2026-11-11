@@ -1,0 +1,4 @@
+#!/bin/zsh
+BIN_DIR="${0:A:h}"
+python3 "$BIN_DIR/repo-agent.py" run studio "$@"
+exec zsh -i

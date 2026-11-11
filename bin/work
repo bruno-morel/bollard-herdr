@@ -1,0 +1,799 @@
+#!/bin/zsh
+# Completion checks are read-only except for an explicit assessment/receipt.
+if [[ "${1:-}" == complete ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-completion.py" "$@"
+fi
+# Previewed branch integration, before repository setup and shorthand.
+if [[ "${1:-}" == sync ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-sync.py" "$@"
+fi
+# Native test panel and TUI share this explicit bounded runner.
+if [[ "${1:-}" == tests ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-tests.py" "$@"
+fi
+# Docker-only starts run in the background; no agent or Zellij session is opened.
+if [[ "${1:-}" == docker ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-docker.py" "$@"
+fi
+# Read-only Docker inspection, before shorthand/repository setup.
+if [[ "${1:-}" == observe ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-observe.py" "$@"
+fi
+set -e
+
+# Independent review v1: dispatch before Git setup and stream shorthand.
+if [[ "${1:-}" == review ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-review.py" "$@"
+fi
+
+# Shared desktop/TUI workflow: parse before shorthand and repository setup.
+if [[ "${1:-}" == flow ]]; then
+    shift
+    exec python3 "${0:A:h}/repo-flow.py" work "$@"
+fi
+
+# Herdr dispatch v3: help has no repository/Docker/session side effects.
+if [[ "${1:-}" == herdr ]]; then
+    shift
+    exec python3 "${0:A:h}/repo_herdr.py" work "$@"
+fi
+for _work_arg in "$@"; do
+    if [[ "$_work_arg" == --help || "$_work_arg" == -h || "$_work_arg" == help ]]; then
+        cat <<'WORK_HELP'
+work — isolated development workspaces for the current Git repository
+
+  work agent-prompt [stream]  Print startup context for an IDE chat
+  work open <stream> --agent codex|claude|cursor
+
+  work transfer <stream> <destination> [--apply]   Preview/copy into another repository
+
+Git updates:
+
+  work sync sources
+  work sync preview --source refs/remotes/origin/main --fetch
+  work sync apply --token <preview-token>
+
+Herdr:
+
+  work flow                 Shared desktop/TUI workflow menu
+  work flow --help          Open, prepare, implement through review, helpers
+
+  work herdr [stream] [--agent codex|claude|cursor]
+      Create/reopen a Herdr pane with the stream's Docker stack.
+      --resume [ID] opens a saved chat; --new-chat starts fresh context.
+      --take prepares the latest handoff; --attach attaches from an outer shell.
+
+Docker:
+
+  work docker start [stream]   Start this stream’s stack without an agent
+  work docker status [stream]  Inspect startup progress
+
+Completion (never starts tests or Claude):
+
+  work complete [stream] --init   Create/preserve the small risk assessment
+  work complete [stream]          Check current evidence and record local completion
+
+Tests (no Claude usage):
+
+  work tests status [stream] --json
+  work tests run [stream]       Rerun the configured finite checks
+  work tests send [stream] --target tID   Send failures to the selected idle lead
+  work tests setup [stream] --target tID  Ask the lead to define finite checks
+
+Review:
+
+  work review [stream]               Checks, then a bounded independent Claude review
+  work review [stream] --prepare     Prepare acceptance/check inputs (no Claude)
+  work review [stream] --status      Verdict, freshness and remaining allowance
+  work review [stream] --follow-up   One focused recheck after fixes
+  work review [stream] --new-cycle   Explicitly authorize another review pair
+
+Lifecycle:
+
+  work take [stream] [--agent codex|claude|cursor]
+      Read the handoff, inspect the code, and prepare an implementation plan.
+      Wait for approval before application-code changes.
+
+  work prepare <feature>    Prepare Git stream without Docker
+  work path <feature>       Print verified worktree path
+
+  work new <feature>
+      Create branch + worktree + isolated Docker stack + Zellij workspace.
+
+  work open <feature>
+      Resume a workspace.
+
+  work stop <feature>
+      Stop Docker and Zellij, preserving worktree/branch/data.
+
+  work rm <feature>
+      Remove worktree and Docker resources.
+      ALWAYS preserves the Git branch.
+
+  work finish <feature>
+      Finish a merged feature.
+      Refuses unless merge can be proven.
+      Removes worktree, Docker resources and local branch.
+
+  work finish <feature> --delete-remote
+      Same, and also removes the remote feature branch.
+
+Other:
+
+  work ls
+  work status <feature>
+
+Examples:
+
+  work new double-check-docs
+  work open double-check-docs
+  work stop double-check-docs
+  work finish double-check-docs
+WORK_HELP
+        exit 0
+    fi
+done
+unset _work_arg
+
+
+die() { print -ru2 -- "work: $*"; exit 1; }
+BIN_DIR="${0:A:h}"
+
+# Work session cleanup v1
+if [[ "${1:-}" == cleanup ]]; then
+    shift
+    exec python3 "$BIN_DIR/work-cleanup.py" "$@"
+fi
+
+# Work take v1
+if [[ "${1:-}" == take ]]; then
+    shift
+    exec python3 "$BIN_DIR/repo-agent.py" take work "$@"
+fi
+
+# Stream shorthand v1
+case "${1:-}" in
+    ""|_herdr-start|_herdr-pane|_herdr-env|prepare|path|new|open|ls|list|status|stop|rm|remove|finish|transfer|agent-prompt|help|-h|--help|-*) ;;
+    *) set -- open "$@" ;;
+esac
+# Repository transfer v1
+if [[ "${1:-}" == transfer ]]; then
+    shift
+    exec python3 "$BIN_DIR/repo-transfer.py" "$@"
+fi
+source "$BIN_DIR/repo-context.zsh"
+# Agent-neutral workflow v1
+agent_choice=""
+args=()
+while (( $# )); do
+    if [[ "$1" == --agent ]]; then
+        (( $# >= 2 )) || die "--agent requires codex, claude, or cursor"
+        [[ -z "$agent_choice" ]] || die "provide --agent only once"
+        agent_choice="$2"
+        shift 2
+    else
+        args+=("$1")
+        shift
+    fi
+done
+set -- "${args[@]}"
+if [[ -n "$agent_choice" ]]; then
+    case "$agent_choice" in codex|claude|cursor) ;; *) die "unknown agent: $agent_choice" ;; esac
+    case "${1:-}" in _herdr-pane|open|new|"") ;; *) die "--agent is supported with open/new only" ;; esac
+fi
+if [[ "${1:-}" == agent-prompt ]]; then
+    shift
+    exec python3 "$BIN_DIR/repo-agent.py" prompt work "$@"
+fi
+STATE="$RUNTIME/work/$REPO_ID"
+# Store checkouts beside the primary repository.
+# Resolve through Git so this also works from linked worktrees.
+MAIN_CHECKOUT="$(python3 - <<'WORKTREE_ROOT'
+import os
+import subprocess
+import sys
+
+records = subprocess.check_output(
+    ["git", "worktree", "list", "--porcelain", "-z"]
+).split(b"\0")
+
+if not records or not records[0].startswith(b"worktree "):
+    sys.exit("work: cannot determine the primary repository location")
+
+print(os.fsdecode(records[0][9:]))
+WORKTREE_ROOT
+)" || die "cannot determine the primary repository location"
+
+WTROOT="${MAIN_CHECKOUT}-worktrees"
+
+[[ ! -L "$WTROOT" ]] ||
+    die "worktree directory must not be a symlink: $WTROOT"
+
+# Avoid placing sibling checkouts inside an outer Git repository.
+if [[ "$(git -C "${WTROOT:h}" rev-parse --is-inside-work-tree 2>/dev/null)" == true ]]; then
+    die "worktree parent is inside another Git repository: ${WTROOT:h}"
+fi
+LAYOUT="${WORK_LAYOUT:-work}"
+# Only commands that prepare/open streams may create workspace directories.
+case "${1:-}" in
+    prepare|new|open) mkdir -p "$WTROOT" "$STATE" ;;
+esac
+slugify() {
+    echo "$1" |
+        tr '[:upper:]' '[:lower:]' |
+        sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+# Import old runtime records only when their worktree belongs to this repository.
+# Existing stacks retain their original Compose/session identities.
+import_legacy() {
+    local record legacy_root common_check slug
+    for record in "${XDG_STATE_HOME:-$HOME/.local/state}"/*/*/state.env(N); do
+        legacy_root="$(
+            source "$record"
+            print -r -- "$WORKTREE_PATH"
+        )"
+        [[ -d "$legacy_root" ]] || continue
+        common_check="$(git -C "$legacy_root" rev-parse --git-common-dir 2>/dev/null)" || continue
+        [[ "$common_check" = /* ]] || common_check="$legacy_root/$common_check"
+        common_check="$(cd "$common_check" && pwd -P)"
+        [[ "$common_check" == "$COMMON" ]] || continue
+        slug="${record:h:t}"
+        [[ "$slug" == "$(slugify "$slug")" && -n "$slug" ]] || continue
+        [[ ! -e "$STATE/$slug" ]] || continue
+        mkdir -p "$STATE/$slug"
+        cp "$record" "$STATE/$slug/state.env"
+        print -r -- 'LEGACY_COMPOSE=1' >> "$STATE/$slug/state.env"
+    done
+}
+
+state_dir() {
+    echo "$STATE/$1"
+}
+
+state_file() {
+    echo "$(state_dir "$1")/state.env"
+}
+
+load_state() {
+    local slug="$1"
+    local f
+    f="$(state_file "$slug")"
+
+    # Read existing state only. Cleanup and inspection must never recover.
+    [[ -f "$f" ]] || die "no saved workspace: $slug; use work open $slug to recover it"
+    LEGACY_COMPOSE=0
+    source "$f"
+    if [[ "${2:-}" != herdr ]]; then
+        SESSION="$(python3 "$BIN_DIR/repo_sessions.py" resolve work "$WORKTREE_PATH" "$SESSION")" || die "cannot locate Work session"
+    fi
+    local actual_common actual_branch stream_file
+    actual_common="$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir)" ||
+        die "missing stream worktree"
+    [[ "$actual_common" = /* ]] ||
+        actual_common="$WORKTREE_PATH/$actual_common"
+    actual_common="$(cd "$actual_common" && pwd -P)"
+    [[ "$actual_common" == "$COMMON" ]] ||
+        die "stream belongs to another repository"
+    actual_branch="$(git -C "$WORKTREE_PATH" symbolic-ref --quiet --short HEAD)" ||
+        die "stream has detached HEAD"
+    [[ "$actual_branch" == "$BRANCH" ]] ||
+        die "expected branch $BRANCH; found $actual_branch"
+    stream_file="$WORKTREE_PATH/docs/handoffs/$SLUG/branch.txt"
+    if [[ -f "$stream_file" ]]; then
+        [[ "$(cat "$stream_file")" == "$BRANCH" ]] ||
+            die "handoff branch does not match $BRANCH"
+    fi
+    activate_compose
+}
+
+next_slot() {
+    local slot=1
+    local f
+    local used
+
+    while (( slot < 100 )); do
+        used=0
+
+        for f in "$RUNTIME"/work/*/*/state.env(N) "${XDG_STATE_HOME:-$HOME/.local/state}"/*/*/state.env(N); do
+            if grep -q "^SLOT=$slot$" "$f"; then
+                used=1
+                break
+            fi
+        done
+
+        if (( ! used )); then
+            echo "$slot"
+            return
+        fi
+
+        (( slot++ ))
+    done
+
+    die "no free workspace slots"
+}
+
+session_exists() {
+    local sessions
+    sessions="$(zellij list-sessions --no-formatting 2>/dev/null)" || return 1
+    print -r -- "$sessions" | awk -v wanted="$1" '
+        $1 == wanted && $0 !~ /EXITED/ { found = 1 }
+        END { exit !found }
+    '
+}
+
+clean_zellij_session() {
+    local session="$1"
+
+    zellij kill-session "$session" 2>/dev/null || true
+    zellij delete-session "$session" 2>/dev/null || true
+}
+
+require_clean_worktree() {
+    local worktree="$1"
+    local studio_session
+    studio_session="$(python3 "$BIN_DIR/studio-session.py" "$worktree")" || die "cannot inspect Studio session"
+    [[ -n "$studio_session" ]] &&
+        die "stop the stream's Studio session before removing its worktree"
+
+    if [[ -n "$(git -C "$worktree" status --porcelain)" ]]; then
+        echo
+        git -C "$worktree" status --short
+        echo
+        die "worktree has uncommitted changes; commit or stash them first"
+    fi
+}
+
+create_compose_override() {
+    local slug="$1" slot="$2" dir="$(state_dir "$1")"
+    python3 "$BIN_DIR/work-compose.py" "${ENV_SOURCE_ROOT:-$ROOT}" "$WORKTREE_PATH" "$dir" "$REPO_ID" "$slug" "$slot"
+}
+
+activate_compose() {
+    local dir="$(state_dir "$SLUG")"
+    if (( LEGACY_COMPOSE )); then
+        unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_ENV_FILES
+        [[ -f "$WORKTREE_PATH/.env" ]] || die "legacy workspace .env is missing: $WORKTREE_PATH"
+        export COMPOSE_FILE="$(sed -n 's/^COMPOSE_FILE=//p' "$WORKTREE_PATH/.env")"
+        export COMPOSE_PROJECT_NAME="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' "$WORKTREE_PATH/.env")"
+        LAYOUT="${WORK_LAYOUT:-work-tenhumans}"
+        return
+    fi
+    export COMPOSE_PROJECT_NAME="work-${REPO_ID}-${SLUG}"
+    export COMPOSE_FILE="$dir/compose.work.json"
+    export COMPOSE_ENV_FILES="$dir/compose.env"
+    if [[ -z "${WORK_LAYOUT:-}" && -f "$COMPOSE_FILE" ]] && grep -q '"tenhumans"' "$COMPOSE_FILE"; then
+        LAYOUT=work-tenhumans
+    fi
+}
+
+save_state() {
+    local slug="$1"
+    local slot="$2"
+    local worktree="$3"
+    local dir
+    dir="$(state_dir "$slug")"
+
+    cat > "$dir/state.env" <<EOF
+SLUG=$slug
+SLOT=$slot
+WORKTREE_PATH=${(q)worktree}
+ENV_SOURCE_ROOT=${(q)ROOT}
+BRANCH=codex/$slug
+SESSION=$(python3 "$BIN_DIR/repo_sessions.py" name work "$worktree")
+PORT_TENHUMANS=$((5173 + slot * 100))
+PORT_TENGAYS=$((5174 + slot * 100))
+PORT_TENLEZ=$((5175 + slot * 100))
+PORT_POSTGRES=$((5432 + slot * 100))
+PORT_REDIS=$((6379 + slot * 100))
+EOF
+}
+
+# Shared Studio/Work streams v1
+# Automatic stream recovery v1
+prepare_workspace() {
+    python3 "$BIN_DIR/work-recover.py" "$ROOT" "$STATE" "$WTROOT" "$RUNTIME" "$@"
+}
+
+start_workspace_stack() {
+    if (( ! LEGACY_COMPOSE )) && { [[ ! -f "$COMPOSE_FILE" ]] || [[ -f "$(state_dir "$SLUG")/compose.refresh" ]]; }; then
+        create_compose_override "$SLUG" "$SLOT"
+        rm -f "$(state_dir "$SLUG")/compose.refresh"
+    fi
+    activate_compose
+    cd "$WORKTREE_PATH"
+    python3 "$BIN_DIR/repo-transfer.py" init "$WORKTREE_PATH"
+    python3 "$BIN_DIR/repo-agent.py" context work "$SLUG"
+    if [[ -f "docs/handoffs/$SLUG/implementation.md" ]]; then
+        print -r -- "Handoff: $WORKTREE_PATH/docs/handoffs/$SLUG/implementation.md"
+    elif [[ -f "docs/handoffs/$SLUG/codex-prompt.md" ]]; then
+        print -r -- "Legacy handoff: $WORKTREE_PATH/docs/handoffs/$SLUG/codex-prompt.md"
+    fi
+    docker compose config >/dev/null
+    echo "Starting Docker stack..."
+    docker compose up -d --build
+
+}
+
+open_workspace() {
+    local slug="$1"
+    agent_args=()
+    [[ -z "$agent_choice" ]] || agent_args=(--agent "$agent_choice")
+    python3 "$BIN_DIR/repo-agent.py" configure work "$slug" "${agent_args[@]}"
+    prepare_workspace "$slug" --existing-only
+    load_state "$slug"
+
+    # Guard Work session entry before starting Docker or attaching.
+    if [[ -n "${ZELLIJ:-}" || -n "${ZELLIJ_SESSION_NAME:-}" ]]; then
+        if [[ "${ZELLIJ_SESSION_NAME:-}" == "$SESSION" ]]; then
+            print -r -- "Already in Work session: $SESSION"
+            return 0
+        fi
+        die "already inside another Zellij session; detach first, then run work open $slug"
+    fi
+
+
+    start_workspace_stack
+
+    if session_exists "$SESSION"; then
+        exec zellij attach "$SESSION"
+    fi
+
+    # Remove a stale/dead serialized session if necessary.
+    zellij delete-session "$SESSION" 2>/dev/null || true
+
+    exec zellij -s "$SESSION" -n "$LAYOUT"
+}
+
+# Internal entry points share the same Docker preparation and saved Compose identity.
+case "${1:-}" in
+    _herdr-env)
+        (( $# == 2 )) || die "invalid Herdr environment invocation"
+        load_state "$2" herdr
+        export PORT_TENHUMANS PORT_TENGAYS PORT_TENLEZ PORT_POSTGRES PORT_REDIS
+        exec python3 -c 'import os,json; print(json.dumps({k:v for k,v in os.environ.items() if k.startswith("COMPOSE_") or k in ("PORT_TENHUMANS","PORT_TENGAYS","PORT_TENLEZ","PORT_POSTGRES","PORT_REDIS")}))'
+        ;;
+    _herdr-start)
+        (( $# == 2 )) || die "invalid Herdr stack invocation"
+        load_state "$2" herdr
+        start_workspace_stack
+        exit 0
+        ;;
+    _herdr-pane)
+        (( $# >= 2 )) || die "missing Herdr stream"
+        load_state "$2" herdr
+        shift 2
+        cd "$WORKTREE_PATH"
+        [[ -z "$agent_choice" ]] || set -- "$@" --agent "$agent_choice"
+        exec python3 "$BIN_DIR/repo_herdr.py" _pane work "$SLUG" "$@"
+        ;;
+esac
+
+# Recovery and legacy imports are limited to explicit open/prepare commands.
+case "${1:-}" in
+    prepare|new|open) import_legacy ;;
+esac
+
+# Repeating cleanup after removal is harmless and does not recover branches.
+case "${1:-}" in
+    stop|rm|remove)
+        [[ -n "${2:-}" ]] || die "usage: work $1 <stream>"
+        slug="$(slugify "$2")"
+        [[ -n "$slug" ]] || die "invalid stream name"
+        if [[ ! -f "$(state_file "$slug")" ]]; then
+            print -r -- "No saved workspace for $slug; nothing changed. A Git branch or checkout may still exist."
+            exit 0
+        fi
+        ;;
+esac
+
+case "${1:-}" in
+
+    prepare)
+        [[ -n "${2:-}" ]] || die "usage: work prepare <stream>"
+        prepare_workspace "$2"
+        ;;
+    path)
+        [[ -n "${2:-}" ]] || die "usage: work path <stream>"
+        load_state "$(slugify "$2")"
+        print -r -- "$WORKTREE_PATH"
+        ;;
+    new)
+        [[ -n "${2:-}" ]] || die "usage: work new <stream>"
+        [[ -z "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" ]] ||
+            die "detach from Zellij before running work new"
+        prepare_workspace "$2"
+        open_workspace "$(slugify "$2")"
+        ;;
+
+    open)
+        [[ -n "${2:-}" ]] || die "usage: work open <feature>"
+        open_workspace "$(slugify "$2")"
+        ;;
+
+    ls|list)
+        python3 "$BIN_DIR/studio-list.py"
+        ;;
+
+    status)
+        [[ -n "${2:-}" ]] || die "usage: work status <feature>"
+
+        slug="$(slugify "$2")"
+        load_state "$slug"
+
+        echo "$SLUG"
+        echo
+        echo "  Path:      $WORKTREE_PATH"
+        echo "  Branch:    $BRANCH"
+        echo "  Session:   $SESSION"
+        echo
+        echo "Git:"
+        git -C "$WORKTREE_PATH" status --short --branch
+
+        echo
+        echo "Docker:"
+        (
+            cd "$WORKTREE_PATH"
+            [[ ! -f "$COMPOSE_FILE" && "$LEGACY_COMPOSE" == 0 ]] || docker compose ps
+        )
+        ;;
+
+    stop)
+        [[ -n "${2:-}" ]] || die "usage: work stop <feature>"
+
+        slug="$(slugify "$2")"
+        load_state "$slug"
+
+        (
+            cd "$WORKTREE_PATH"
+            [[ ! -f "$COMPOSE_FILE" && "$LEGACY_COMPOSE" == 0 ]] || docker compose stop
+        )
+
+        clean_zellij_session "$SESSION"
+
+        echo "Stopped $slug"
+        ;;
+
+    rm|remove)
+        (( $# == 2 || $# == 3 )) || die "usage: work rm <stream> [--force]"
+        force_remove=0
+        if (( $# == 3 )); then
+            [[ "$3" == --force ]] || die "unknown option: $3"
+            force_remove=1
+        fi
+        [[ -n "${2:-}" ]] || die "usage: work rm <feature>"
+
+        slug="$(slugify "$2")"
+        load_state "$slug"
+
+        python3 "$BIN_DIR/repo_herdr.py" _guard-remove "$WORKTREE_PATH"
+
+        if (( force_remove )); then
+            print -r -- "FORCE: discard all uncommitted and ignored files in $WORKTREE_PATH."
+            print -r -- "This also deletes the workspace's Docker volumes."
+        else
+            require_clean_worktree "$WORKTREE_PATH"
+        fi
+
+        echo "Workspace: $SLUG"
+        echo "Branch:    $BRANCH"
+        echo "Path:      $WORKTREE_PATH"
+        echo
+        echo "This removes the worktree and Docker resources."
+        echo "The Git branch is preserved."
+        echo
+        printf "Continue? [y/N] "
+        read answer
+
+        [[ "$answer" == [yY] ]] || exit 0
+
+        (
+            cd "$WORKTREE_PATH"
+            [[ ! -f "$COMPOSE_FILE" && "$LEGACY_COMPOSE" == 0 ]] || docker compose down -v --remove-orphans
+        )
+
+        # Preserve branch, but remove its checked-out worktree.
+        if (( force_remove )); then
+            git --git-dir="$COMMON" worktree remove --force "$WORKTREE_PATH"
+        else
+            git --git-dir="$COMMON" worktree remove "$WORKTREE_PATH"
+        fi
+        cd "$COMMON"
+
+        rm -rf "$(state_dir "$slug")"
+
+        # Do this last so running `work rm` inside its own Zellij session
+        # cannot interrupt the important cleanup above.
+        clean_zellij_session "$SESSION"
+
+        echo
+        echo "Removed workspace $slug"
+        echo "Branch preserved as: $BRANCH"
+        ;;
+
+    finish)
+        [[ -n "${2:-}" ]] || die "usage: work finish <feature> [--delete-remote]"
+
+        slug="$(slugify "$2")"
+        delete_remote=0
+        [[ "${3:-}" == "--delete-remote" ]] && delete_remote=1
+
+        load_state "$slug"
+
+        python3 "$BIN_DIR/repo_herdr.py" _guard-remove "$WORKTREE_PATH"
+        require_clean_worktree "$WORKTREE_PATH"
+
+        echo "Refreshing origin/main..."
+        git -C "$ROOT" fetch origin main
+
+        current_oid="$(git -C "$WORKTREE_PATH" rev-parse HEAD)"
+        safe_to_finish=0
+        merge_reason=""
+
+        # Best case: the exact current feature tip is already contained in main.
+        if git -C "$ROOT" merge-base --is-ancestor \
+             "$current_oid" origin/main 2>/dev/null; then
+            safe_to_finish=1
+            merge_reason="feature commit is contained in origin/main"
+        fi
+
+        # Squash/rebase merges do not preserve ancestry. Ask GitHub whether
+        # the PR was merged, and ensure this worktree still points at the
+        # exact head commit that PR contained.
+        if (( ! safe_to_finish )) && command -v gh >/dev/null 2>&1; then
+            pr_info="$(
+                cd "$ROOT"
+                gh pr view "$BRANCH" \
+                    --json state,mergedAt,url,headRefOid \
+                    --jq '"\(.state)|\(.mergedAt // "")|\(.url)|\(.headRefOid)"' \
+                    2>/dev/null || true
+            )"
+
+            if [[ -n "$pr_info" ]]; then
+                IFS='|' read -r pr_state pr_merged_at pr_url pr_head_oid \
+                    <<< "$pr_info"
+
+                if [[ "$pr_state" == "MERGED" &&
+                      "$current_oid" == "$pr_head_oid" ]]; then
+                    safe_to_finish=1
+                    merge_reason="GitHub PR is merged ($pr_url)"
+                fi
+            fi
+        fi
+
+        if (( ! safe_to_finish )); then
+            echo
+            echo "NOT finishing $slug."
+            echo
+            echo "The current feature tip cannot be proven merged into origin/main."
+            echo "Nothing has been deleted."
+            echo
+            echo "Current branch:"
+            git -C "$WORKTREE_PATH" status --short --branch
+            echo
+            echo "Use:"
+            echo "  work open $slug"
+            echo
+            echo "after the feature is merged, then run:"
+            echo "  work finish $slug"
+            exit 2
+        fi
+
+        echo
+        echo "Safe to finish:"
+        echo "  $merge_reason"
+        echo
+
+        (
+            cd "$WORKTREE_PATH"
+            [[ ! -f "$COMPOSE_FILE" && "$LEGACY_COMPOSE" == 0 ]] || docker compose down -v --remove-orphans
+        )
+
+        # Remove the worktree before deleting its checked-out branch.
+        git --git-dir="$COMMON" worktree remove "$WORKTREE_PATH"
+        cd "$COMMON"
+
+        # We have explicitly proven the feature safe above. -D avoids Git's
+        # misleading warning when a squash/rebase merge is not ancestral.
+        if git --git-dir="$COMMON" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+            git --git-dir="$COMMON" branch -D "$BRANCH"
+        fi
+
+        if (( delete_remote )); then
+            if git --git-dir="$COMMON" ls-remote --exit-code \
+                 --heads origin "$BRANCH" >/dev/null 2>&1; then
+                echo "Deleting remote branch origin/$BRANCH..."
+                git --git-dir="$COMMON" push origin --delete "$BRANCH"
+            fi
+        fi
+
+        rm -rf "$(state_dir "$slug")"
+
+        # Last operation: if we invoked finish from this very Zellij session,
+        # killing it now cannot interrupt Git/Docker cleanup.
+        clean_zellij_session "$SESSION"
+
+        echo
+        echo "Finished $slug."
+        (( delete_remote )) ||
+            echo "Remote branch was left untouched."
+        ;;
+
+    help|-h|--help|"")
+        cat <<'EOF'
+work — isolated development workspaces for the current Git repository
+
+  work agent-prompt [stream]  Print startup context for an IDE chat
+  work open <stream> --agent codex|claude|cursor
+
+  work transfer <stream> <destination> [--apply]   Preview/copy into another repository
+
+Tests (no Claude usage):
+
+  work tests status [stream] --json
+  work tests run [stream]       Rerun the configured finite checks
+  work tests send [stream] --target tID   Send failures to the selected idle lead
+  work tests setup [stream] --target tID  Ask the lead to define finite checks
+
+Review:
+
+  work review [stream]               Checks, then a bounded independent Claude review
+  work review [stream] --prepare     Prepare acceptance/check inputs (no Claude)
+  work review [stream] --status      Verdict, freshness and remaining allowance
+  work review [stream] --follow-up   One focused recheck after fixes
+  work review [stream] --new-cycle   Explicitly authorize another review pair
+
+Lifecycle:
+
+  work take [stream] [--agent codex|claude|cursor]
+      Read the handoff, inspect the code, and prepare an implementation plan.
+      Wait for approval before application-code changes.
+
+  work prepare <feature>    Prepare Git stream without Docker
+  work path <feature>       Print verified worktree path
+
+  work new <feature>
+      Create branch + worktree + isolated Docker stack + Zellij workspace.
+
+  work open <feature>
+      Resume a workspace.
+
+  work stop <feature>
+      Stop Docker and Zellij, preserving worktree/branch/data.
+
+  work rm <feature>
+      Remove worktree and Docker resources.
+      ALWAYS preserves the Git branch.
+
+  work finish <feature>
+      Finish a merged feature.
+      Refuses unless merge can be proven.
+      Removes worktree, Docker resources and local branch.
+
+  work finish <feature> --delete-remote
+      Same, and also removes the remote feature branch.
+
+Other:
+
+  work ls
+  work status <feature>
+
+Examples:
+
+  work new double-check-docs
+  work open double-check-docs
+  work stop double-check-docs
+  work finish double-check-docs
+EOF
+        ;;
+
+    *)
+        die "unknown command: $1 (try: work help)"
+        ;;
+esac

@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""Studio/Work terminal dashboard: tools above the same herdr-core conversations."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess as sp
+import sys
+import time
+from repo_tui_common import *
+
+def seed():
+    b=Backend()
+    for lane in ('top','bottom'):
+        p=runtime()/(lane+'.json')
+        if not p.exists():
+            old=read(BASE/'studio-work'/(lane+'.json'))
+            if old: save(p,old)
+        old=read(p,{})
+        if old.get('address'):
+            try:
+                current=b.hc('get',old['address'])
+                if current.get('state')=='live':continue
+                matches=[r for r in b.inventory() if W.machine(r['address'])==W.machine(old['address'])
+                         and all(W.label(r,k)==W.label(old,k) for k in ('repo','role','stream'))]
+                if len(matches)==1:save(p,matches[0])
+            except (RuntimeError,OSError,ValueError,sp.SubprocessError):pass
+
+def bootstrap():
+    pane=os.environ['HERDR_PANE_ID']
+    with (runtime()/'bootstrap.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        current=layout()
+        if current:
+            try:
+                for d in current.values(): native('pane','get',d['panel'])
+                return next((k for k,v in current.items() if v['panel']==pane),None)
+            except (RuntimeError,KeyError): pass
+        # Both lane roots exist before either creates its conversation children.
+        result=native('pane','split',pane,'--direction','down','--ratio','0.5',
+                      '--cwd',str(Path.home()),'--env','REPO_TUI_LANE=bottom','--env','REPO_TUI_VIEW=panel','--no-focus')
+        save(runtime()/'layout.json',{'top':{'panel':pane},'bottom':{'panel':pane_id(result)}})
+        return 'top'
+
+def children(lane):
+    pane=os.environ['HERDR_PANE_ID']
+    # Bootstrap holds this lock until it has saved both roots.
+    with (runtime()/'bootstrap.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+    with (runtime()/(lane+'-layout.lock')).open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        d=layout().get(lane,{})
+        if d.get('conversation'):
+            try: native('pane','get',d['conversation']);return
+            except RuntimeError: pass
+        result=native('pane','split',pane,'--direction','down','--ratio','0.22','--cwd',str(Path.home()),
+                      '--env','REPO_TUI_LANE='+lane,'--env','REPO_TUI_VIEW=conversation','--no-focus')
+        update('layout',lambda x:dict(x,**{lane:dict(x.get(lane,{}),panel=pane,conversation=pane_id(result))}))
+
+def conversation(lane):
+    child=None;address=None;failed=None
+    native('pane','rename',os.environ['HERDR_PANE_ID'],'Conversation · Ctrl+B t tools')
+    try:
+        while True:
+            row=lane_state(lane);next_address=row.get('address')
+            if next_address!=address:
+                if child and child.poll() is None:
+                    child.terminate();child.wait(timeout=8)  # Only this hc attach client, never the agent.
+                child=None;address=next_address;failed=None
+            if address and child is None and failed!=address:
+                try:
+                    live=Backend().verify(row)
+                    child=sp.Popen([Backend().binary,'attach',live['address']])
+                except (RuntimeError,OSError,ValueError,sp.SubprocessError) as e:
+                    print('\nConversation unavailable: '+str(e)+'\nUse Change stream to choose its existing conversation.',flush=True)
+                    failed=address
+            if child and child.poll() is not None:
+                child=None;failed=address
+                control(lane,tab='home',detached=True,request=time.time())
+                native('pane','focus','--pane',os.environ['HERDR_PANE_ID'],'--direction','up')
+            if state(lane).get('reattach'):
+                control(lane,reattach=False);failed=None
+            if not address and failed!='empty':
+                print('\nChoose an existing conversation with Change stream above.\n',flush=True);failed='empty'
+            time.sleep(.3)
+    finally:
+        if child and child.poll() is None: child.terminate()
+
+def command(action):
+    d=layout();pane=os.environ.get('HERDR_PANE_ID');lane=os.environ.get('REPO_TUI_LANE')
+    # Key-command processes may inherit a popup ID; use the selected dashboard's focus.
+    if lane not in d:
+        probe=next(iter(d.values()),{}).get('panel')
+        if probe: pane=native('pane','layout','--pane',probe)['layout']['focused_pane_id']
+        lane=next((k for k,v in d.items() if pane in v.values()),None)
+    if lane not in d: raise RuntimeError('Focus one of the dashboard streams first')
+    row=d[lane]
+    action={'tools':'menu','change':'pick','info':'info'}.get(action,action)
+    control(lane,request=time.time(),command=action)
+    if pane==row.get('info'):
+        native('pane','focus','--pane',pane,'--direction','left')
+    if pane!=row['panel']:
+        native('pane','focus','--pane',row['conversation'],'--direction','up')
+
+def launch():
+    seed()
+    config=Path.home()/'.config/herdr/studio-work-v2.toml'
+    if not config.is_file(): raise RuntimeError('Studio/Work TUI configuration is missing')
+    env=dict(os.environ,HERDR_CONFIG_PATH=str(config),REPO_TUI_SESSION=SESSION)
+    env['PATH']=os.pathsep.join([str(Path.home()/'.local/bin'),'/opt/homebrew/bin','/usr/local/bin',env.get('PATH','/usr/bin:/bin')])
+    for key in ('REPO_TUI_LANE','REPO_TUI_VIEW'):env.pop(key,None)
+    binary=shutil.which('herdr',path=env['PATH'])
+    # The server/panes survive detachment. Only a live client may confirm a file
+    # was displayed; its short heartbeat expires after lost SSH connections.
+    stamp=runtime()/('viewer-'+str(os.getpid())+'.json');started=time.time()*1000
+    client=sp.Popen([binary,'--session',SESSION],env=env)
+    try:
+        while client.poll() is None:
+            save(stamp,dict(pid=os.getpid(),started_ms=started,heartbeat=time.time()))
+            try:client.wait(timeout=2)
+            except sp.TimeoutExpired:pass
+    finally:
+        stamp.unlink(missing_ok=True)
+        if client.poll() is None:client.terminate()
+    return client.returncode
+
+def main():
+    os.umask(0o077)
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('action',nargs='?',choices=['open','shell','command'],default='open')
+    p.add_argument('value',nargs='?',default='tools');a=p.parse_args()
+    if a.action=='open': return launch()
+    if not managed(): raise RuntimeError('Run herdr to open the dashboard first')
+    if a.action=='command': return command(a.value)
+    lane=os.environ.get('REPO_TUI_LANE');view=os.environ.get('REPO_TUI_VIEW','panel')
+    if lane not in ('top','bottom'):
+        lane=bootstrap()
+        if not lane: os.execv('/bin/zsh',['zsh','-l'])
+    if view=='conversation':return conversation(lane)
+    if view=='panel':children(lane)
+    from repo_tui_panel import start
+    start(lane,view)
+
+if __name__=='__main__':
+    try:main()
+    except (RuntimeError,OSError,ValueError,KeyError,sp.SubprocessError) as e:sys.exit('Studio/Work TUI: '+str(e))

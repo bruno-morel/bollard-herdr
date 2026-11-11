@@ -1,0 +1,90 @@
+#!/bin/zsh
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "studio-watch: run inside a Git repository" >&2
+    exit 1
+}
+cd "$root" || exit 1
+
+while true; do
+    clear
+    python3 <<'PY'
+import pathlib
+import shutil
+import subprocess
+
+def git(*args):
+    result = subprocess.run(
+        ["git", "--no-optional-locks", *args],
+        capture_output=True, text=True
+    )
+    return result.stdout.rstrip("\n")
+
+width, height = shutil.get_terminal_size((40, 30))
+limit = max(2, (height - 15) // 2)
+
+def show(text=""):
+    text = "".join(c if c.isprintable() else "?" for c in text)
+    print(text[:max(8, width - 1)])
+
+scope = ["--", ".", ":(exclude)scratch", ":(exclude)scratch/**"]
+branch = git("symbolic-ref", "--quiet", "--short", "HEAD")
+show("BRANCH  " + (branch or git("rev-parse", "--short", "HEAD")))
+show()
+show("CHANGED FILES")
+
+changes = git("status", "--short", "--untracked-files=all", *scope).splitlines()
+for item in changes[:limit]:
+    show(item)
+if not changes:
+    show("Working tree clean")
+elif len(changes) > limit:
+    show(f"… {len(changes) - limit} more")
+
+show()
+show("DIFF  staged + unstaged")
+counts = {}
+for extra in ([], ["--cached"]):
+    for entry in git("diff", *extra, "--numstat", "--no-renames", *scope).splitlines():
+        added, removed, name = entry.split("\t", 2)
+        previous = counts.setdefault(name, [0, 0, False])
+        if added == "-":
+            previous[2] = True
+        else:
+            previous[0] += int(added)
+            previous[1] += int(removed)
+
+for name, (added, removed, binary) in list(counts.items())[:limit]:
+    show(f'{"binary" if binary else f"+{added}/-{removed}"} {name}')
+if not counts:
+    show("No tracked-file changes")
+elif len(counts) > limit:
+    show(f"… {len(counts) - limit} more")
+
+show()
+show("LATEST HANDOFFS")
+recent = []
+for folder in pathlib.Path("docs/handoffs").glob("*"):
+    if folder.is_dir() and not folder.is_symlink():
+        try:
+            modified = max(
+                [folder.stat().st_mtime] +
+                [f.stat().st_mtime for f in folder.glob("*.md")]
+            )
+            recent.append((modified, folder.name))
+        except FileNotFoundError:
+            pass
+for _, name in sorted(recent, reverse=True)[:3]:
+    show(name)
+if not recent:
+    show("No handoffs yet")
+
+show()
+show("Enter → shell · refresh 10s")
+PY
+    if read -r -k 1 -t 10 reply 2>/dev/null; then
+        [[ "$reply" == $'\n' || "$reply" == $'\r' ]] && break
+    fi
+done
+
+clear
+exec zsh -i

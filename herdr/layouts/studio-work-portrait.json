@@ -1,0 +1,438 @@
+{
+  "id": "portrait-root",
+  "type": "column",
+  "children": [
+    {
+      "id": "portrait-bar",
+      "type": "block",
+      "content": {
+        "mod": "repo-portrait",
+        "props": {
+          "kind": "manager",
+          "defaults": {}
+        }
+      },
+      "size": {
+        "px": 42
+      },
+      "window_drag": true
+    },
+    {
+      "id": "portrait-body",
+      "type": "row",
+      "children": [
+        {
+          "id": "sidebar",
+          "type": "column",
+          "children": [
+            {
+              "id": "spaces",
+              "type": "block",
+              "content": {
+                "mod": "repo-spaces"
+              },
+              "size": {
+                "weight": 1
+              },
+              "min": 100
+            },
+            {
+              "id": "agents",
+              "type": "block",
+              "content": {
+                "mod": "agents"
+              },
+              "size": {
+                "weight": 0.699999988079071
+              },
+              "min": 100
+            },
+            {
+              "id": "sidebar-footer",
+              "type": "block",
+              "content": {
+                "mod": "workspace-chrome",
+                "props": {
+                  "footer": true
+                }
+              },
+              "size": {
+                "px": 69
+              }
+            }
+          ],
+          "size": {
+            "px": 168
+          },
+          "min": 130,
+          "max": 320,
+          "hidden": true,
+          "background": "chrome"
+        },
+        {
+          "id": "portrait-streams",
+          "type": "column",
+          "children": [
+            {
+              "id": "top-lane",
+              "type": "column",
+              "children": [
+                {
+                  "id": "top-header",
+                  "type": "block",
+                  "content": {
+                    "mod": "repo-portrait",
+                    "props": {
+                      "kind": "header",
+                      "lane": "top"
+                    }
+                  },
+                  "size": {
+                    "px": 46
+                  },
+                  "min": 46,
+                  "max": 46
+                },
+                {
+                  "id": "top-views",
+                  "type": "stack",
+                  "children": [
+                    {
+                      "id": "top-read",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-reader",
+                        "props": {
+                          "lane": "top",
+                          "mode": "docs"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-review",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-review",
+                        "props": {
+                          "lane": "top"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-docker",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "docker",
+                          "lane": "top"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-files",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-reader",
+                        "props": {
+                          "lane": "top",
+                          "mode": "files"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-changes",
+                        "props": {
+                          "lane": "top",
+                          "kind": "changes"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-tests",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "lane": "top",
+                          "kind": "tests"
+                        }
+                      }
+                    },
+                    {
+                      "id": "top-questions",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "lane": "top",
+                          "kind": "questions"
+                        }
+                      }
+                    }
+                  ],
+                  "active": "top-questions",
+                  "size": {
+                    "weight": 0.47999998927116394
+                  },
+                  "min": 220,
+                  "max": 1200,
+                  "hidden": true
+                },
+                {
+                  "id": "top-body",
+                  "type": "row",
+                  "children": [
+                    {
+                      "id": "top-conversation",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "empty",
+                          "lane": "top"
+                        }
+                      },
+                      "size": {
+                        "weight": 0.7599999904632568
+                      },
+                      "min": 240,
+                      "background": "background",
+                      "border": {
+                        "width": 1,
+                        "color": "border"
+                      },
+                      "radius": 8
+                    },
+                    {
+                      "id": "top-info",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "info",
+                          "lane": "top"
+                        }
+                      },
+                      "size": {
+                        "weight": 0.23999999463558197
+                      },
+                      "min": 210,
+                      "max": 430,
+                      "hidden": true,
+                      "background": "chrome",
+                      "radius": 8
+                    }
+                  ],
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 200,
+                  "gap": 6,
+                  "resizable": true
+                }
+              ],
+              "size": {
+                "weight": 0.8563775420188904
+              },
+              "min": 420,
+              "padding": 6,
+              "gap": 6,
+              "resizable": true
+            },
+            {
+              "id": "lane-mw8th5pm-lane",
+              "type": "column",
+              "children": [
+                {
+                  "id": "lane-mw8th5pm-header",
+                  "type": "block",
+                  "content": {
+                    "mod": "repo-portrait",
+                    "props": {
+                      "kind": "header",
+                      "lane": "lane-mw8th5pm"
+                    }
+                  },
+                  "size": {
+                    "px": 46
+                  },
+                  "min": 46,
+                  "max": 46
+                },
+                {
+                  "id": "lane-mw8th5pm-views",
+                  "type": "stack",
+                  "children": [
+                    {
+                      "id": "lane-mw8th5pm-read",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-reader",
+                        "props": {
+                          "lane": "lane-mw8th5pm",
+                          "mode": "docs"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-review",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-review",
+                        "props": {
+                          "lane": "lane-mw8th5pm"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-docker",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "docker",
+                          "lane": "lane-mw8th5pm"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-files",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-reader",
+                        "props": {
+                          "lane": "lane-mw8th5pm",
+                          "mode": "files"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait-changes",
+                        "props": {
+                          "lane": "lane-mw8th5pm",
+                          "kind": "changes"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-tests",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "lane": "lane-mw8th5pm",
+                          "kind": "tests"
+                        }
+                      }
+                    },
+                    {
+                      "id": "lane-mw8th5pm-questions",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "lane": "lane-mw8th5pm",
+                          "kind": "questions"
+                        }
+                      }
+                    }
+                  ],
+                  "active": "lane-mw8th5pm-review",
+                  "size": {
+                    "weight": 0.47999998927116394
+                  },
+                  "min": 220,
+                  "max": 1200,
+                  "hidden": true
+                },
+                {
+                  "id": "lane-mw8th5pm-body",
+                  "type": "row",
+                  "children": [
+                    {
+                      "id": "lane-mw8th5pm-conversation",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "empty",
+                          "lane": "bottom"
+                        }
+                      },
+                      "size": {
+                        "weight": 0.7599999904632568
+                      },
+                      "min": 240,
+                      "background": "background",
+                      "border": {
+                        "width": 1,
+                        "color": "border"
+                      },
+                      "radius": 8
+                    },
+                    {
+                      "id": "lane-mw8th5pm-info",
+                      "type": "block",
+                      "content": {
+                        "mod": "repo-portrait",
+                        "props": {
+                          "kind": "info",
+                          "lane": "lane-mw8th5pm"
+                        }
+                      },
+                      "size": {
+                        "weight": 0.23999999463558197
+                      },
+                      "min": 210,
+                      "max": 430,
+                      "hidden": true,
+                      "background": "chrome",
+                      "radius": 8
+                    }
+                  ],
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 200,
+                  "gap": 6,
+                  "resizable": true
+                }
+              ],
+              "size": {
+                "weight": 1.1836094856262207
+              },
+              "min": 200,
+              "padding": 6,
+              "gap": 6,
+              "resizable": true
+            }
+          ],
+          "gap": 8,
+          "divider": {
+            "width": 2,
+            "color": "border"
+          }
+        }
+      ],
+      "gap": 1
+    }
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    10,
+    12
+  ],
+  "resizable": false,
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    14
+  ]
+}

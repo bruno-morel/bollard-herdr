@@ -1,0 +1,24 @@
+layout {
+    default_tab_template {
+        children
+
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+    }
+
+    tab name="STUDIO" focus=true {
+        pane split_direction="vertical" {
+            pane size="72%" name="STUDIO AI" command="studio-agent"
+            pane size="28%" name="CHANGES / SHELL" command="studio-watch"
+        }
+    }
+
+    tab name="READ" {
+        pane name="MARKDOWN READER" command="repo-read" close_on_exit=false
+    }
+
+    tab name="GIT" {
+        pane name="GIT" command="lazygit"
+    }
+}

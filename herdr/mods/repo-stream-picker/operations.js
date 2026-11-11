@@ -1,0 +1,110 @@
+import {
+  exec,
+  shared,
+  setShared,
+  notify
+} from 'herdr';
+
+// Display the controller's operation contract; do not infer retry safety in UI code.
+export function operation(job) {
+  return job?.operation || {};
+}
+
+export function stepText(step) {
+  const mark = {
+    done: '✓',
+    failed: '⚠',
+    active: '◷',
+    pending: '○'
+  } [step.status] || '○';
+  return mark + ' ' + step.label;
+}
+
+export function progressText(job) {
+  const state = operation(job);
+  const mark = state.failed || job?.error ? '⚠' : state.success ? '✓' : '◷';
+  const label = state.label || job?.stage || job?.state || 'Opening';
+  const seconds = Math.max(0, job?.elapsed_seconds || 0);
+  return mark + ' ' + label + ' · ' + Math.floor(seconds / 60) + 'm';
+}
+
+export function currentOperation(checkpoint, opening, workflow) {
+  const candidates = [checkpoint, opening, workflow].filter(job => job?.state || job?.message);
+  const active = candidates.find(job => operation(job).active || job.active);
+  if (active) return active;
+  // Keep recent failures/results visible, not an old checkpoint forever.
+  return candidates.sort((a, b) => numericTime(b.updated) - numericTime(a.updated))[0] || {};
+}
+
+function numericTime(value) {
+  return typeof value === 'number' ? value : Date.parse(value || '') / 1000 || 0;
+}
+
+// These are the only desktop calls needed to observe or request checkpoints.
+// The backend owns validation, retries and operation state.
+export async function requestCheckpoint(target, retry = false) {
+  const args = [target.stream, '--target', target.terminal.split('/').pop()];
+  args.push(...(retry ? ['--retry', target.token] : ['--confirm']));
+  return command('repo-new-conversation.py', args, target);
+}
+
+async function command(binary, args, context) {
+  const result = await exec(binary, args, {
+    cwd: context.cwd,
+    on: context.on
+  });
+  if (result.code) throw Error(result.stderr || result.stdout || binary + ' failed');
+  return JSON.parse(result.stdout);
+}
+
+export async function refreshStatuses(lanes) {
+  for (const context of Object.values(lanes).filter(Boolean)) {
+    const key = JSON.stringify([context.on, context.cwd]);
+    const results = await Promise.allSettled([
+      command('work', ['flow', 'status', context.stream], context),
+      command('repo-new-conversation.py', [context.stream, '--status'], context),
+    ]);
+    const errors = [];
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status !== 'fulfilled') {
+        errors.push(String(result.reason));
+        continue;
+      }
+      const job = result.value;
+      const storage = i === 0 ? 'repo.flow-status' : 'repo.checkpoint-status';
+      setShared(storage, {
+        ...(shared(storage) || {}),
+        [key]: job
+      });
+      const state = operation(job);
+      if (!state.notification) continue;
+      const seen = shared('repo.operation-notifications') || {};
+      const eventKey = key + ':' + state.kind;
+      if (seen[eventKey] === state.event_id) continue;
+      setShared('repo.operation-notifications', {
+        ...seen,
+        [eventKey]: state.event_id
+      });
+      const action = i === 1 && state.can_retry ? {
+        name: 'repo-portrait.retry-checkpoint:' + encodeURIComponent(JSON.stringify({
+          ...context,
+          terminal: job.target,
+          token: job.token,
+        })),
+      } : undefined;
+      notify({
+        title: context.stream + ' · ' + state.label,
+        body: job.message,
+        level: state.notification,
+        action
+      });
+    }
+    const stored = {
+      ...(shared('repo.operation-errors') || {})
+    };
+    if (errors.length) stored[key] = errors.join('\n');
+    else delete stored[key];
+    setShared('repo.operation-errors', stored);
+  }
+}

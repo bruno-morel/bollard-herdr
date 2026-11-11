@@ -1,0 +1,68 @@
+#!/bin/zsh
+set -o pipefail
+
+MODE="${1:---compact}"
+TAIL="${WORK_LOG_TAIL:-150}"
+
+docker compose logs \
+  -f \
+  --tail="$TAIL" \
+  --no-color \
+  tenhumans tengays tenlez 2>&1 |
+awk -v mode="$MODE" '
+function compact(line, prefix, rest) {
+    if (match(line, /^[^|]+\|/)) {
+        prefix = substr(line, 1, RLENGTH - 1)
+        rest   = substr(line, RLENGTH + 1)
+
+        gsub(/^[ \t]+|[ \t]+$/, "", prefix)
+
+        if (prefix ~ /tenhumans/)      prefix = "H"
+        else if (prefix ~ /tengays/)  prefix = "G"
+        else if (prefix ~ /tenlez/)   prefix = "L"
+
+        return sprintf("%-2s |%s", prefix, rest)
+    }
+
+    return line
+}
+
+function boilerplate(line) {
+    return (
+        line ~ /VITE v[0-9]/ ||
+        line ~ /Local:[[:space:]]+http/ ||
+        line ~ /Network:[[:space:]]+http/ ||
+        line ~ /press h \+ enter/
+    )
+}
+
+{
+    line = compact($0)
+    low = tolower(line)
+
+    important = (
+        low ~ /error/ ||
+        low ~ /exception/ ||
+        low ~ /fatal/ ||
+        low ~ /failed/ ||
+        low ~ /unhandled/ ||
+        low ~ /warn/ ||
+        low ~ /deprecated/
+    )
+
+    if (mode == "--errors" && !important)
+        next
+
+    if (mode != "--all" && boilerplate(line))
+        next
+
+    if (low ~ /error|exception|fatal|failed|unhandled/)
+        printf "\033[31m%s\033[0m\n", line
+    else if (low ~ /warn|warning|deprecated/)
+        printf "\033[33m%s\033[0m\n", line
+    else
+        print line
+
+    fflush()
+}
+'
