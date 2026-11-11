@@ -32,6 +32,15 @@ for _studio_arg in "$@"; do
         print -r -- '  studio list              List repository streams'
         print -r -- '  studio handoff           Build the current stream handoff'
         print -r -- '  studio cleanup           Inspect/clean Studio Zellij sessions'
+        print -r -- '  studio rm <stream> [--force]  Remove its workspace and local branch'
+        print -r -- '  studio agent-prompt [stream] Print context for an IDE chat'
+        print -r -- '  studio transfer <stream> <destination> [--apply]'
+        print -r -- '      Preview/copy a stream into another repository.'
+        print -r -- '  studio sync --help       Preview branch integration options'
+        print -r -- ''
+        print -r -- '  Documents: init | idea new <name> | asset new <name>'
+        print -r -- '             handoff {new|build|ls} [name] | prompt <name> | copy <name>'
+        print -r -- '  Aliases: new → open, stop → close, ls → list; <stream> → open <stream>'
         print -r -- ''
         print -r -- 'Help only: no repository, session, or file changes.'
         exit 0
@@ -155,17 +164,7 @@ slugify() {
 }
 
 project_dir() { print -r -- "$ROOT/docs"; }
-set_current() { :; }
 current_project() { print -r -- "$PROJECT"; }
-
-session_exists() {
-    local sessions
-    sessions="$(zellij list-sessions --no-formatting 2>/dev/null)" || return 1
-    print -r -- "$sessions" | awk -v wanted="$1" '
-        $1 == wanted && $0 !~ /EXITED/ { found = 1 }
-        END { exit !found }
-    '
-}
 
 create_project() {
     python3 "$BIN_DIR/repo-transfer.py" init "$ROOT"
@@ -189,7 +188,6 @@ open_project() {
     [[ -d "$dir" ]] ||
         die "unknown project: $project"
 
-    set_current "$project"
     cd "$ROOT"
 
     local live_session
@@ -443,7 +441,7 @@ build_handoff() {
     python3 "$BIN_DIR/repo-agent.py" build studio "$(slugify "$2")"
 }
 
-show_prompt() {
+prompt_file() {
     local project="$1"
     local slug="$2"
     local file
@@ -454,6 +452,13 @@ show_prompt() {
 
     [[ -f "$file" ]] ||
         die "prompt not built; run: studio handoff build $slug"
+
+    print -r -- "$file"
+}
+
+show_prompt() {
+    local file
+    file="$(prompt_file "$1" "$2")" || return 1
 
     if command -v bat >/dev/null 2>&1; then
         bat --style=plain "$file"
@@ -463,17 +468,8 @@ show_prompt() {
 }
 
 copy_prompt() {
-    local project="$1"
-    local slug="$2"
-    local file
-    local encoded
-
-    slug="$(slugify "$slug")"
-    file="$(project_dir "$project")/handoffs/$slug/implementation.md"
-    [[ -f "$file" ]] || file="$(project_dir "$project")/handoffs/$slug/codex-prompt.md"
-
-    [[ -f "$file" ]] ||
-        die "prompt not built; run: studio handoff build $slug"
+    local file encoded
+    file="$(prompt_file "$1" "$2")" || return 1
 
     # OSC52 copies through SSH/Zellij to a compatible client terminal.
     encoded="$(base64 < "$file" | tr -d '\n')"
@@ -614,29 +610,14 @@ elif [[ "$1" == handoff && $# == 1 ]]; then
 fi
 
 case "${1:-}" in
-    new)
-        [[ -n "${2:-}" ]] || die "usage: studio new <stream>"
-        [[ -z "${ZELLIJ:-}${ZELLIJ_SESSION_NAME:-}" ]] ||
-            die "detach from Zellij before running studio new"
-        stream="$(slugify "$2")"
-        [[ -n "$stream" ]] || die "invalid stream name"
-        "$BIN_DIR/work" prepare "$stream"
-        select_stream "$stream"
-        create_project
-        handoff="$ROOT/docs/handoffs/$stream"
-        [[ -d "$handoff" ]] || new_handoff "$PROJECT" "$stream"
-        printf 'codex/%s\n' "$stream" > "$handoff/branch.txt"
-        open_project "$PROJECT"
-        ;;
     init)
         create_project
         echo "Studio initialized: $ROOT/docs"
         ;;
-    open|"")
-        create_project
+    open)
         open_project "$PROJECT"
         ;;
-    ls|list)
+    list)
         python3 "$BIN_DIR/studio-list.py"
         ;;
     status)
@@ -663,15 +644,6 @@ case "${1:-}" in
         echo "Asset projects:"
         find "$dir/assets/projects" -mindepth 1 -maxdepth 1 -type d 2>/dev/null |
             wc -l | tr -d ' '
-        ;;
-
-    stop|close)
-        project="$PROJECT"
-        session="$(python3 "$BIN_DIR/repo_sessions.py" name studio "$ROOT")" || die "cannot name Studio session"
-
-        session="$(python3 "$BIN_DIR/studio-session.py" "$ROOT")" || die "cannot locate Studio session"
-        [[ -z "$session" ]] || zellij kill-session "$session" 2>/dev/null || true
-        echo "Stopped $project Studio session."
         ;;
 
     idea)
@@ -769,27 +741,6 @@ case "${1:-}" in
             die "usage: studio copy <handoff>"
 
         copy_prompt "$project" "$2"
-        ;;
-
-    help|-h|--help)
-        cat <<'EOF'
-studio — planning and handoffs on a shared Git stream
-
-  studio agent-prompt [stream]  Print startup context for an IDE chat
-  studio open <stream> --agent codex|claude|cursor
-
-  studio transfer <stream> <destination> [--apply]   Preview/copy into another repository
-
-  studio open <stream>     Create or resume a stream
-  studio close [stream]    End its Studio session
-  studio list              List streams in this repository
-  studio handoff           Build/update this stream's implementation prompt
-
-Inside a stream, plain studio resumes it.
-Detach to leave a session running; close ends it.
-Existing commands remain available for compatibility.
-
-EOF
         ;;
 
     *)

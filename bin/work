@@ -43,9 +43,8 @@ if [[ "${1:-}" == herdr ]]; then
     shift
     exec python3 "${0:A:h}/repo_herdr.py" work "$@"
 fi
-for _work_arg in "$@"; do
-    if [[ "$_work_arg" == --help || "$_work_arg" == -h || "$_work_arg" == help ]]; then
-        cat <<'WORK_HELP'
+work_help() {
+    cat <<'WORK_HELP'
 work — isolated development workspaces for the current Git repository
 
   work agent-prompt [stream]  Print startup context for an IDE chat
@@ -84,7 +83,7 @@ Tests (no Claude usage):
   work tests status [stream] --json
   work tests run [stream]       Rerun the configured finite checks
   work tests send [stream] --target tID   Send failures to the selected idle lead
-  work tests setup [stream] --target tID  Ask the lead to define finite checks
+  work tests first [stream] --target tID  Let a child select project checks, then run them
 
 Review:
 
@@ -136,6 +135,11 @@ Examples:
   work stop double-check-docs
   work finish double-check-docs
 WORK_HELP
+}
+
+for _work_arg in "$@"; do
+    if [[ "$_work_arg" == --help || "$_work_arg" == -h || "$_work_arg" == help ]]; then
+        work_help
         exit 0
     fi
 done
@@ -677,72 +681,8 @@ case "${1:-}" in
             echo "Remote branch was left untouched."
         ;;
 
-    help|-h|--help|"")
-        cat <<'EOF'
-work — isolated development workspaces for the current Git repository
-
-  work agent-prompt [stream]  Print startup context for an IDE chat
-  work open <stream> --agent codex|claude|cursor
-
-  work transfer <stream> <destination> [--apply]   Preview/copy into another repository
-
-Tests (no Claude usage):
-
-  work tests status [stream] --json
-  work tests run [stream]       Rerun the configured finite checks
-  work tests send [stream] --target tID   Send failures to the selected idle lead
-  work tests setup [stream] --target tID  Ask the lead to define finite checks
-
-Review:
-
-  work review [stream]               Checks, then a bounded independent Claude review
-  work review [stream] --prepare     Prepare acceptance/check inputs (no Claude)
-  work review [stream] --status      Verdict, freshness and remaining allowance
-  work review [stream] --follow-up   One focused recheck after fixes
-  work review [stream] --new-cycle   Explicitly authorize another review pair
-
-Lifecycle:
-
-  work take [stream] [--agent codex|claude|cursor]
-      Read the handoff, inspect the code, and prepare an implementation plan.
-      Wait for approval before application-code changes.
-
-  work prepare <feature>    Prepare Git stream without Docker
-  work path <feature>       Print verified worktree path
-
-  work new <feature>
-      Create branch + worktree + isolated Docker stack + Zellij workspace.
-
-  work open <feature>
-      Resume a workspace.
-
-  work stop <feature>
-      Stop Docker and Zellij, preserving worktree/branch/data.
-
-  work rm <feature>
-      Remove worktree and Docker resources.
-      ALWAYS preserves the Git branch.
-
-  work finish <feature>
-      Finish a merged feature.
-      Refuses unless merge can be proven.
-      Removes worktree, Docker resources and local branch.
-
-  work finish <feature> --delete-remote
-      Same, and also removes the remote feature branch.
-
-Other:
-
-  work ls
-  work status <feature>
-
-Examples:
-
-  work new double-check-docs
-  work open double-check-docs
-  work stop double-check-docs
-  work finish double-check-docs
-EOF
+    "")
+        work_help
         ;;
 
     *)
