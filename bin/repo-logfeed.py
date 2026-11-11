@@ -121,16 +121,7 @@ def worker(stream, token):
             env = json.loads(O.run([str(BIN / "work"), "_herdr-env", stream], root))
             if not O.prepared_environment(env, root):
                 raise RuntimeError("Docker stack has not been prepared")
-            values = {
-                k: v for k, v in os.environ.items() if not k.startswith("COMPOSE_")
-            }
-            values.update(
-                {
-                    k: v
-                    for k, v in env.items()
-                    if k.startswith("COMPOSE_") and isinstance(v, str)
-                }
-            )
+            values = O.environment(env)
             proc = sp.Popen(
                 [
                     "docker",
