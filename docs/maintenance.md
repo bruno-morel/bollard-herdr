@@ -8,7 +8,7 @@
 | Repetition | Shared desktop helpers, check validation, remote transport, helper presets, CLI help and atomic JSON writes. | Other backend command/state duplication. |
 | Architecture | Separate picker, transport, terminal controls, menu and display rows. | Workflow orchestration and remaining panel responsibilities. |
 | Tests | Isolated HOME/Git; installer rollback; stream identity; checkpoint retries; completion evidence; bounded review; helper ownership; shell aliases; real-Git merge previews, stale tokens, ignored collisions and conflicts. | Atomic state writes now cover serialization/rename failures, permissions and concurrent writers. Remaining backend failure paths and interactive UI behavior. |
-| Docs | Short setup/workflow guides, diagrams and commands. Fixed the test-run example. | Gallery recipe and remaining command examples. |
+| Docs | Short setup/workflow guides, diagrams and commands. Checked test commands; shortened the gallery recipe and added first-run guidance. | Remaining command examples and interaction checks. |
 | Publication | Check tracked files and unignored candidates across the whole repo. | Final privacy, notices and package audit. |
 
 ## Constraints worth keeping

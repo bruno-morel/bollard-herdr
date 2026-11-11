@@ -41,6 +41,13 @@ It never owns workflow state, review allowances or agent locks.
 `repo_tui_present` turns cached evidence into display rows; it does no I/O.
 Missing data means loading or unknown—not a clean bill of health.
 
+## State writes
+
+`repo_state.write_json` replaces a JSON file atomically with a private temporary
+file beside it. Failure preserves the old file and removes the temporary one.
+Callers still own directory validation and locks around read/modify/write.
+Atomic replacement prevents torn JSON; it doesn't resolve competing decisions.
+
 ## Check a change
 
 ```sh

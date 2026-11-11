@@ -46,6 +46,23 @@ Ask the agent to show a file, or pick one yourself. The conversation stays put.
 **Ask a helper about this** starts separate, read-only Codex/Cursor help with the
 pane's context. Claude is reserved for review, not every passing thought.
 
+## First test run
+
+Use **First tests run** in the Tests panel. A read-only Codex/Cursor child inspects
+the project's runners, writes the check list, then starts the first run. The lead
+stays available. No Claude call.
+
+For the CLI, get the lead's terminal ID with `hc ls`, then substitute it below:
+
+```sh
+work tests first my-feature --target tID
+work tests status my-feature
+```
+
+Later, **Rerun tests** uses that saved list. Checks live in
+`docs/handoffs/my-feature/tests-input.json` (or the review input fallback).
+No configured checks? Define them first; an empty list isn't a passing test suite.
+
 ## Check completion without rerunning tests
 
 ```sh

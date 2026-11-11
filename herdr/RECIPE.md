@@ -1,123 +1,103 @@
 # Bollard for Herdr
 
-A portrait workspace with two independently selected Git streams: planning above,
-implementation below, or any two conversations you choose. Each stream keeps a
-large agent conversation, tools above it and optional compact information beside
-it. Studio and Work share handoffs and use the same repository-aware controllers
-as the companion terminal dashboard.
+Two streams. Keep the conversation; bring the tools to it.
 
-![Bollard for Herdr — first launch before choosing streams](preview.png)
+![First launch, before choosing streams](preview.png)
 
-The preview shows a clean first launch. It deliberately contains no saved host,
-project, terminal IDs, conversations or account usage. Choose a stream in either
-half to reveal its controls.
+The preview contains no personal hosts, projects, conversations or account data.
+The desktop starts with two unpinned streams. Planning above, coding below—or
+pick any two conversations. No sheep. The agents wander enough already.
 
-## What you see
+## Shape
 
-- A 42px global bar with a sidebar toggle and Add stream menu. Start with two
-  stacked regions; support additional horizontal or vertical splits and windows.
-- A hidden-by-default left sidebar, 168px initially, showing spaces grouped by
-  repository/folder and agent notifications when expanded.
-- Each stream has a compact toolbar: repository/stream picker on the left,
-  conversation state and tool choices on the right. Overflow should wrap safely
-  rather than hide controls on a narrow window.
-- A large conversation surface with native terminal interaction. Optional tools
-  appear above it: Docker, Docs/Files/Git, Tests/Review and Questions.
-- Docs is Markdown/text; Files browses all file types; Git presents changed files
-  with their diffs. Offer folder, type and list modes and prefer modified files.
-- The information panel sits beside the conversation, initially hidden. It is
-  roughly one-quarter width, constrained to 210–430px. Tabs show agent/model
-  information, usage meters and compact Docker memory/status cards.
-- Use Herdr theme colors: white/light conversation surfaces in a light theme,
-  muted tool surfaces and a contrasting information area. Status colors are
-  green/yellow/red, with muted idle states. Use supplied line icons and native
-  terminal typography; do not introduce decorative pets or CPU/network meters.
-
-## How it behaves
-
-Choose stream offers active conversations, existing worktrees, remote branches
-and a new stream from a base branch. Existing conversation identity is retained.
-Studio/Work roles apply when starting agents, not as a silent role switch for an
-existing conversation. Selection, file viewing and UI expansion must not launch
-another agent accidentally.
-
-Working agents retain their conversation; questions need attention, idle/finished
-work gets a subdued attention treatment, and actual failures are red. Show only
-available model, reasoning and quota data—missing data is not zero usage.
-
-Conversation hides the tool area. Docs/Files/Git and Tests/Review are grouped
-pickers whose labels reflect the selected view. Right-aligned action buttons
-belong above pane content. Docker streams scrollable, copyable logs; no stack
-shows a friendly empty state and an explicit Start Docker action.
-
-A requested file opens in the tools region without replacing the conversation.
-Helpers receive pane context and default to read-only Codex/Cursor work. Claude
-review remains an explicit, bounded independent review. Tests use the project's
-runners and report failures, not a fabricated pass. Completion checks inspect
-existing risk/test evidence rather than rerunning everything.
-
-Checkpoint/new-conversation saves handoff context, commits and pushes the stream
-before restarting. Show stages and failures; retry resumes a failed step with
-identity checks. Never silently restart a running conversation or reset allowance
-state. Hover tooltips explain compact icon controls.
-
-## Built from
-
-The `studio-work-portrait` layout is a column: manager bar plus a row containing
-sidebar and the stream tree. Each lane is a column with its toolbar, hidden tools
-region and a row containing the conversation and hidden information block.
-
-`repo-portrait` renders manager, toolbar, empty-conversation and information
-roles, coordinating scoped lane state. `repo-portrait-reader`,
-`repo-portrait-changes` and `repo-portrait-review` render tools. `repo-stream-picker`
-handles selection; `repo-helper`, `repo-sync`, `repo-folders`, `repo-workflow`,
-`repo-spaces`, `repo-tabs` and `repo-menu` provide the associated controls.
-`repo-reader` and `repo-review` support the alternative desktop layout.
-
-Shared helpers are maintained in `desktop/shared/` at the repository root.
-Run `python3 desktop_build.py` after editing them; the generated copies keep
-each mod independently loadable.
-
-Use native `gpui-kit`/`gpui-base` views and Herdr APIs, not DOM components. Commands
-and async operations go through the supplied adapters. Shipped `agents` and
-`workspace-chrome` mods remain external Herdr dependencies. Icons are in the mod
-folders. The window helper is `helpers/window.py`.
-
-**This is not a standalone visual-only layout.** Install the repository's shared
-`bin/` controllers on the development hosts and desktop helpers on the UI host:
-
-```sh
-./install.sh desktop --apply
-# On a remote development host, from its clone:
-./install.sh tui --apply
+```text
+┌ Sidebar toggle · Add stream / window ─────────────────────┐
+│ Optional sidebar │ Stream picker         Tools ▾ Actions ▾ │
+│ Spaces + agents  │ ┌ Optional tools, above conversation ┐ │
+│                  │ └────────────────────────────────────┘ │
+│                  │ Conversation          │ Optional info  │
+│                  ├───────────────────────┴────────────────┤
+│                  │ Second stream: same independent layout │
+└──────────────────┴────────────────────────────────────────┘
 ```
 
-The package runs repository commands via `hc` and SSH, uses installed agent CLIs,
-Git and optionally Docker, Glow and Zellij. Read the root README and controller
-sources before installing. Credentials and runtime state live outside Git.
+Keep conversation surfaces light in a light theme, tools subtly tinted and the
+information panel contrasting. Use Herdr theme colors, native typography and
+line icons. Right-align controls; give icon-only buttons tooltips. No CPU/network
+meters. Narrow windows must keep controls reachable.
 
-## Watch out
+| Region | Content |
+| --- | --- |
+| Global bar | Sidebar toggle; add/split streams or open another window |
+| Sidebar | Spaces grouped by repository/folder; agent notifications |
+| Stream header | Repository/stream and state left; tools and Actions right |
+| Conversation | Native agent terminal; stays separate from tools |
+| Tools above | Conversation/Questions, Docker, Docs/Files/Git, Tests/Review |
+| Optional right panel | Agent/model details, quota meters, Docker memory/status |
 
-Keep each pane bound to its own machine/repository/stream. Two visible streams
-must never share a mutable global selection. Avoid duplicate launchers claiming
-the same conversation. Do not create worktrees just to display a picker.
+The source layout uses a 42px global bar, a hidden 168px sidebar and two resizable
+lanes. Each lane has a header, a hidden tool stack, then conversation plus hidden
+information panel (roughly one-quarter width, 210–430px).
 
-Herdr's native dropdowns and async rendering require native checks and actual
-interaction checks. A successful initial render does not test every deferred
-state. Preserve personal layout pins during upgrades and do not publish live
-terminal IDs. Existing mods must be reconciled, not overwritten blindly.
+## Behavior worth preserving
 
-Desktop UI and TUI are separate presentations of the same backend. This gallery
-folder describes the desktop; `tui/` and `bin/repo_tui*` implement terminal/phone
-presentation. Tested hosts are macOS; other platforms are not yet verified.
+- **Choose a stream:** active conversation, existing worktree, remote branch or
+  new branch. Studio/Work sets the role of a new agent; an existing agent keeps
+  its identity and role. Opening a picker must not launch anything.
+- **Docs / Files / Git:** folder, type or list browsing. Docs renders Markdown and
+  text; Files browses everything; Git shows diffs. Prefer changed files. Agent
+  file requests open here without replacing the conversation.
+- **Docker:** scrollable, copyable live logs. No stack gets a friendly empty state
+  and an explicit Start Docker action, not a wall of red.
+- **Tests / Review:** project-native checks, bounded independent Claude review,
+  and completion evidence. Displaying Review never spends allowance. Unknown or
+  incomplete results must not become green.
+- **Helpers:** separate read-only Codex/Cursor agents receive the current pane's
+  context. They do not silently become the lead or spend Claude review allowance.
+- **New conversation:** save handoff → commit → push → restart. Show progress and
+  failures. Retry rechecks identity and resumes the failed checkpoint.
 
-## Done when
+Questions need attention; idle/finished agents get a subdued attention color;
+errors are red. Missing model, reasoning or quota data stays unknown.
+Each lane owns its machine/repository/stream selection. Never use a shared mutable
+selection for both lanes or claim the same agent with two launchers.
 
-- A clean layout starts with two unpinned streams and no errors.
-- Choosing an existing stream preserves its conversation identity.
-- Tools open above their own conversation; Docs file requests do not replace it.
-- Empty Docker state, failed tests and missing review authentication are explicit.
-- Merely displaying Review consumes no Claude allowance.
-- Checkpoint progress and retry preserve the stream and report failures.
-- `python3 tests/run.py`, `python3 tests/check_sources.py` and native
-  `herdr-app check` pass; no real agent is launched by automated tests.
+## Install
+
+This layout needs Bollard's controllers; copying the pictures won't do it.
+After the [prerequisites](../docs/setup.md#prerequisites), from this repo:
+
+```sh
+./install.sh desktop --apply   # desktop machine
+./install.sh tui --apply       # remote development host, from its own clone
+```
+
+Choose **studio-work-portrait** in Herdr, then choose your streams.
+Use `all` instead of `desktop` to install the laptop TUI too. Desktop and TUI share
+controllers, conversations and evidence; this recipe describes the desktop.
+Credentials and runtime state stay outside Git. macOS is tested; other platforms
+are unverified.
+
+## Building blocks
+
+`layouts/studio-work-portrait.json` defines the lanes. `repo-portrait` owns the
+manager, headers, conversation placeholders and information panels. Reader,
+changes and review mods render tools. Picker, workflow, helper, sync, spaces,
+folders, tabs and menu mods provide controls. `helpers/window.py` opens windows.
+The `agents` and `workspace-chrome` mods come from Herdr itself.
+
+Use native `gpui-kit`/`gpui-base` views and Herdr APIs, not DOM components.
+Shared sources live in `../desktop/shared/`; `python3 desktop_build.py` generates
+self-contained mod copies. Herdr checks each mod in isolation.
+
+## Verify
+
+Follow the [development checks](../docs/development.md#check-a-change), then try:
+
+1. Clean launch: two empty streams, no errors or accidental agents.
+2. Reopen a conversation: same identity; tools stay in their own lane.
+3. Open a file, scroll/copy logs, inspect failed tests and missing authentication.
+4. Inspect Review: no Claude call. Exercise checkpoint failure/retry safely.
+
+Native checks alone don't exercise dropdowns or deferred actions. Preserve
+personal pins during upgrades, and keep terminal IDs out of published layouts.
