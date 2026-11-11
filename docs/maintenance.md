@@ -5,9 +5,9 @@
 | Area | Done | Still to inspect |
 | --- | --- | --- |
 | Dead code | Removed obsolete shell handlers, duplicate setup and unused imports. | Remaining Python call sites and shell paths. |
-| Repetition | Shared desktop helpers, check validation, remote transport, helper presets and CLI help. | Other backend command/state duplication. |
+| Repetition | Shared desktop helpers, check validation, remote transport, helper presets, CLI help and atomic JSON writes. | Other backend command/state duplication. |
 | Architecture | Separate picker, transport, terminal controls, menu and display rows. | Workflow orchestration and remaining panel responsibilities. |
-| Tests | Isolated HOME/Git; installer rollback; stream identity; checkpoint retries; completion evidence; bounded review; helper ownership; shell aliases; real-Git merge previews, stale tokens, ignored collisions and conflicts. | Remaining backend failure paths and interactive UI behavior. |
+| Tests | Isolated HOME/Git; installer rollback; stream identity; checkpoint retries; completion evidence; bounded review; helper ownership; shell aliases; real-Git merge previews, stale tokens, ignored collisions and conflicts. | Atomic state writes now cover serialization/rename failures, permissions and concurrent writers. Remaining backend failure paths and interactive UI behavior. |
 | Docs | Short setup/workflow guides, diagrams and commands. Fixed the test-run example. | Gallery recipe and remaining command examples. |
 | Publication | Check tracked files and unignored candidates across the whole repo. | Final privacy, notices and package audit. |
 

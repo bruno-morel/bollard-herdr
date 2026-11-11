@@ -1,4 +1,5 @@
 """Shared, machine-local presentation state; agents remain owned by herdr-core."""
+from repo_state import write_json as save
 import fcntl
 import json
 import os
@@ -6,7 +7,6 @@ from pathlib import Path
 import re
 import shutil
 import subprocess as sp
-import tempfile
 import time
 
 import repo_stream_backend as Streams
@@ -23,13 +23,6 @@ def runtime():
     p.mkdir(parents=True, exist_ok=True, mode=0o700)
     return p
 
-def save(path, value):
-    fd, name = tempfile.mkstemp(dir=path.parent, prefix='.update-')
-    try:
-        with os.fdopen(fd, 'w') as f: json.dump(value, f)
-        os.replace(name, path)
-    finally:
-        if os.path.exists(name): os.unlink(name)
 
 def update(name, fn):
     with (runtime()/(name+'.lock')).open('a') as lock:

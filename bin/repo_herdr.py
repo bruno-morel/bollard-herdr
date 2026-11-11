@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+from repo_state import write_json
 from pathlib import Path
 import re
 import shutil
@@ -109,9 +110,7 @@ def read_record(pref):
 
 def write_record(pref, data):
     path = pref.with_suffix('.herdr.json')
-    pending = path.with_suffix('.pending')
-    pending.write_text(json.dumps(data, indent=2)+'\n')
-    pending.replace(path)
+    write_json(path, data, indent=2)
 
 
 def local_terminals(target):

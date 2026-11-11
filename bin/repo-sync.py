@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Preview and explicitly merge a recorded branch tip into the current stream."""
 import argparse, fcntl, hashlib, json, os, re, subprocess as sp, sys, time, uuid
+from repo_state import write_json
 from pathlib import Path
 import repo_operations as O
 
@@ -30,10 +31,7 @@ def read(path):
 
 def write(path, data):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    tmp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
-    tmp.write_text(json.dumps(data))
-    os.chmod(tmp, 0o600)
-    tmp.replace(path)
+    write_json(path, data)
 
 
 def trees(root):

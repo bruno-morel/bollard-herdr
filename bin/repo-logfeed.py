@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """A leased, bounded Docker log follower. Never starts/stops containers."""
 import fcntl,hashlib,importlib.util,json,os,selectors,signal,subprocess as sp,sys,time,uuid
+from repo_state import write_json
 from pathlib import Path
 BIN=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('observe',BIN/'repo-observe.py');O=importlib.util.module_from_spec(spec);spec.loader.exec_module(O)
 def write(path,data):
- t=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp');t.write_text(json.dumps(data));t.replace(path)
+ write_json(path, data)
 def read(path):
  try:return json.loads(path.read_text())
  except FileNotFoundError:return {}

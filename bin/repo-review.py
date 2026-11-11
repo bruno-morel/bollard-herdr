@@ -7,6 +7,7 @@ import fcntl
 import hashlib
 import json
 import os
+from repo_state import write_json
 from pathlib import Path
 import re
 import signal
@@ -37,8 +38,7 @@ def read(p, default=None): return json.loads(p.read_text()) if p.exists() else d
 def write(p, data):
     p.parent.mkdir(parents=True,exist_ok=True)
     if p.is_symlink(): fail('refusing symlink: '+str(p))
-    t=p.with_name(p.name+'.'+uuid.uuid4().hex+'.tmp')
-    t.write_text(json.dumps(data,indent=2)+'\n'); t.replace(p)
+    write_json(p, data, indent=2)
 def safe(root, rel):
     if not isinstance(rel,str) or not rel or '\0' in rel or Path(rel).is_absolute() or '..' in Path(rel).parts:
         fail('expected a repository-relative path')

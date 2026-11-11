@@ -2,6 +2,7 @@
 """Safe provider connection summaries, interactive sign-in and reported quota capture."""
 from urllib.parse import urlparse, parse_qs
 import argparse, concurrent.futures, fcntl, json, math, os, re, shlex, shutil, selectors, subprocess as sp, sys, time, uuid
+from repo_state import write_json
 from pathlib import Path
 from repo_claude_usage import refresh as refresh_claude_usage
 PROVIDERS=('codex','claude','cursor','gemini')
@@ -19,7 +20,8 @@ def read(p):
     try:return json.loads(p.read_text())
     except FileNotFoundError:return {}
 def write(p,data):
-    p.parent.mkdir(parents=True,exist_ok=True,mode=0o700);tmp=p.with_name(p.name+'.'+uuid.uuid4().hex+'.tmp');tmp.write_text(json.dumps(data,indent=2)+'\n');os.chmod(tmp,0o600);tmp.replace(p)
+    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    write_json(p, data, indent=2)
 def binary(provider):return next((shutil.which(n) for n in (('cursor-agent','agent') if provider=='cursor' else (provider,)) if shutil.which(n)),None)
 def normalize_codex_limits(result):
     raw=(result.get('rateLimitsByLimitId') or {}).get('codex') or result.get('rateLimits') or {};windows={}

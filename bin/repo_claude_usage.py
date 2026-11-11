@@ -1,4 +1,5 @@
 """Read Claude's native /usage screen. No prompts, tokens, or private API calls."""
+from repo_state import write_json as write
 import errno
 import fcntl
 import json
@@ -12,7 +13,6 @@ import struct
 import subprocess as sp
 import termios
 import time
-import uuid
 from datetime import datetime, timedelta, timezone
 
 INTERVAL = 300
@@ -168,17 +168,6 @@ def read(path):
         return json.loads(path.read_text())
     except (FileNotFoundError, ValueError):
         return {}
-
-
-def write(path, data):
-    tmp = path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
-    try:
-        with tmp.open('x') as f:
-            os.chmod(tmp, 0o600)
-            json.dump(data, f)
-        tmp.replace(path)
-    finally:
-        tmp.unlink(missing_ok=True)
 
 
 def refresh(executable, folder):
