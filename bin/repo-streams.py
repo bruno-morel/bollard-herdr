@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Git-backed stream picker. Catalog is read-only; prepare never resets an existing checkout."""
+from repo_roles import roles
 import argparse, fcntl, hashlib, json, os, re, subprocess as sp, sys
 from pathlib import Path
 
@@ -137,6 +138,7 @@ def catalog(path):
             None,
         )
     return dict(
+        roles=roles(root),
         root=str(root),
         primary=primary,
         common=str(common),

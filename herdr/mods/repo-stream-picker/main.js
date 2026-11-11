@@ -431,13 +431,13 @@ export default class StreamPicker extends View {
       let setup = v_flex().gap(12).child(h_flex().gap(8).children([
         ['studio', 'Studio', 'Planning & handoffs', 'book'],
         ['work', 'Work', 'Implementation & Docker', 'bolt']
-      ].map(([id, label, detail, icon]) => this.button('role-' + id, label, cx => {
+      ].map(([id, label, detail, icon]) => this.button('role-' + id, data?.roles?.[id]?.label || label, cx => {
         this.role = id;
         cx.notify();
       }, {
         selected: this.role === id,
         icon
-      }).flex_1().justify_center().py(10).text_size(14).tooltip(detail))));
+      }).flex_1().justify_center().py(10).text_size(14).tooltip(data?.roles?.[id]?.description || detail))));
       setup = setup.child(select('machine', 'Machine', this.on, machines().map(m => option(m.name, m.name || 'This computer')), (on, cx) => {
         if (this.on !== on) {
           const row = all.find(r => machineOf(r.address) === on);

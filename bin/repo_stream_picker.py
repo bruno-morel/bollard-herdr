@@ -1,6 +1,7 @@
 """Shared Studio/Work stream picker for Herdr TUI and ordinary terminals."""
 
 import argparse
+from repo_roles import DEFAULTS as ROLE_DEFAULTS
 from repo_stream_backend import Backend, machine, label
 from repo_terminal_ui import UI
 import curses
@@ -189,14 +190,15 @@ class Picker:
         role = self.role
         advanced = False
         while True:
+            profiles = self.data.get("roles") or ROLE_DEFAULTS
             self.ui.context = (self.on or "This computer") + " / " + self.data["repo"]
             isnew = source["source"] == "new"
             istree = source["source"] == "tree"
             rows = [
                 (
                     "role",
-                    "◉ " + role.title() + "  ▾",
-                    "Studio: planning and handoffs · Work: implementation and Docker",
+                    "◉ " + profiles[role]["label"] + "  ▾",
+                    profiles[role]["description"],
                 ),
                 (
                     "project",
@@ -289,8 +291,16 @@ class Picker:
                 choice = self.ui.choose(
                     "Role",
                     [
-                        ("studio", "◉ Studio", "Planning · docs · handoffs"),
-                        ("work", "◆ Work", "Implementation · tests · Docker"),
+                        (
+                            "studio",
+                            "◉ " + profiles["studio"]["label"],
+                            profiles["studio"]["description"],
+                        ),
+                        (
+                            "work",
+                            "◆ " + profiles["work"]["label"],
+                            profiles["work"]["description"],
+                        ),
                     ],
                     selected=0 if role == "studio" else 1,
                 )

@@ -129,3 +129,26 @@ The shared adapter is `bin/repo_agents.py`. Adding a name to a picker is not
 sufficient: a provider needs installation/authentication support, safe launch and
 resume handling, read-only helper mode, structured results, and mocked contract
 tests. A quota card alone (for example Gemini) does not imply workflow support.
+
+## Cursor recovery on a remote Mac
+
+Install and authenticate Cursor on the machine running the agent. Installing it
+on the laptop alone does not install it on an SSH host. If login reports
+`errSecInteractionNotAllowed` / `security exit code 36`, unlock the login keychain
+in a shell **on that host**, then authenticate:
+
+```sh
+security unlock-keychain
+cursor-agent login
+cursor-agent status
+```
+
+Enter the host account's password at the secure prompt; never put it in a command,
+configuration file, handoff or chat. Installations named `agent` can use `agent`
+in place of `cursor-agent`. Do not disable keychain protection to work around this.
+
+A failed first login may leave a valid stream with no saved conversation. If the
+resume picker says **No sessions found**, exit it, then choose **n (new chat)** at
+the existing terminal's launcher menu. This starts the first conversation in the
+same checkout and role; it does not create another stream. If history does exist,
+select it instead. Reopening a terminal is not proof authentication succeeded.

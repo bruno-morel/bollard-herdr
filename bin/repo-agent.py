@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from repo_roles import roles
 from repo_risk_policy import POLICY as RISK_POLICY
 import fcntl
 import hashlib
@@ -147,6 +148,9 @@ Follow the file-review instructions for this session when asked to show the plan
         'the actual code, follow acceptance criteria, and run relevant validation. '
         'If scope or acceptance criteria are missing, clarify before implementing.'
     )
+    profile = roles(root)[role]
+    if profile['instructions']:
+        rules += '\n\nAdditional role guidance (preserve the workflow rules below):\n' + profile['instructions']
     if role == 'work':
         rules += (' For MEDIUM/HIGH changes or an explicit review request, before declaring ready to merge, prepare every acceptance criterion '
                   'and the repository-specific finite validation commands with work review --prepare. '
@@ -167,7 +171,7 @@ Follow the file-review instructions for this session when asked to show the plan
     )
     # Herdr-core startup v1
     reader_rules = f'HERDR SESSION\nThis agent runs in herdr-core. Keep the {role.upper()} role and shared handoff rules.\nHERDR DOCS / FILES PANEL\nWhen the user asks to open or show a repository file, run:\nrepo-read --show \'<repository-relative-path>\'\nQuote the actual path correctly for the shell. This routes the full file to the\nseparate Docs (Markdown/.txt) or Files panel in Herdr desktop or the Studio/Work TUI. Keep the conversation separate; each viewer uses its own file presentation.\nKeep your agent process and conversation in the current STUDIO or WORK terminal.\nDo not start a reader in your own terminal, split panes, or run Zellij commands.\nOnly report the file opened if the command says Opened; Queued means the user must\nselect this stream in the Studio Work layout. Report routing errors accurately.\nAfter substantially updating a document, offer to show it; do not send file requests\nunprompted during background work. If execution requires approval, request it normally.\nDo not run studio open or work open from this terminal; they still launch Zellij.\nDo not start other agents unless the user explicitly asks. If authorized to delegate,\nread hc --skill first and use its installed-version instructions.\nCore restarts do not guarantee conversation resumption. Maintain context.md for recovery.\n' if os.environ.get('HC_TERMINAL_ID') else "READ PANE ROUTING\nWhen the user asks to open or show a repository file, run:\nrepo-read --show '<repository-relative-path>'\nQuote the actual path correctly for the shell. This sends the file to the\nexisting READ pane in this Zellij session and focuses it. Keep your agent\nprocess and conversation in the current STUDIO or WORK pane.\nDo not launch an interactive reader in your own pane or create another pane.\nAfter creating or substantially updating a document, offer to show it; do not\nswitch tabs automatically while continuing background work.\nIf routing fails, report the error rather than claiming the file opened.\nIf execution requires approval, request the normal command approval."
-    return f'''SESSION ROLE: {role.upper()}
+    return f'''SESSION ROLE: {role.upper()} — {profile['label']}
 Checkout: {root}
 Expected branch: codex/{stream}
 Stream: {stream}
