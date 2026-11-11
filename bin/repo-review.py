@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded independent reviews. No model runs during prepare/status/help."""
 import argparse
+from repo_checks import validate_commands
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -97,20 +98,7 @@ def validate_config(c):
     if not isinstance(c.get('base'),str) or not c['base'] or c['base'].startswith('-') or 'SET_' in c['base']: fail('set the base branch in review-input.json (do not assume main)')
     criteria,checks=c.get('criteria'),c.get('checks')
     if not isinstance(criteria,list) or not criteria or len(criteria)>30: fail('declare 1–30 concrete acceptance criteria')
-    if not isinstance(checks,list) or not checks or len(checks)>8: fail('declare 1–8 finite validation commands')
-    ids=set()
-    for x in checks:
-        if not isinstance(x,dict): fail('invalid check')
-        ident=x.get('id','')
-        if not isinstance(ident,str) or not re.fullmatch('[a-z0-9-]{1,40}',ident) or ident in ids: fail('check IDs must be unique lowercase names')
-        ids.add(ident)
-        if x.get('kind') not in ('unit','integration','e2e','static'): fail('check kind must be unit, integration, e2e or static')
-        a=x.get('argv')
-        if not isinstance(a,list) or not a or not all(isinstance(s,str) and s and '\0' not in s for s in a): fail('each check needs an argv array (no shell command string)')
-        if not isinstance(x.get('cwd','.'),str): fail('check cwd must be a string')
-        if x.get('cwd','.')!='.' and (Path(x['cwd']).is_absolute() or '..' in Path(x['cwd']).parts): fail('check cwd must be within the checkout')
-        if type(x.get('timeout',120)) is not int or not 1<=x.get('timeout',120)<=300: fail('check timeout must be 1–300 seconds')
-    if sum(x.get('timeout',120) for x in checks)>1200: fail('total declared check timeouts cannot exceed 20 minutes')
+    ids=validate_commands(checks)
     seen=set()
     for x in criteria:
         if not isinstance(x,dict): fail('invalid criterion')
@@ -139,12 +127,11 @@ def load_config(root,stream,base=None):
 def excluded(rel,stream):
     return rel.startswith('scratch/') or rel.startswith('docs/handoffs/'+stream+'/reviews/')
 
-def fingerprint(root,stream,c,*,source_limit=None):
+def fingerprint(root,stream,c):
     """Use Git's stored object IDs for clean files; hash only dirty/untracked bytes.
 
     This is freshness bookkeeping, not a model context payload. Evidence reads
     remain limited by MAX_FILE and review turns/time retain their own limits.
-    source_limit is retained for compatibility with older test launchers.
     """
     branch=git(root,'symbolic-ref','--quiet','--short','HEAD')
     if branch!='codex/'+stream: fail('checkout branch no longer matches the review stream')
@@ -270,19 +257,20 @@ def process(argv,root,log,seconds,env=None,tick=None):
     with log.open('wb') as out:
         p=sp.Popen(argv,cwd=root,stdout=out,stderr=sp.STDOUT,env=env,start_new_session=True)
         active=log.parent/('.active-'+str(p.pid))
-        active.write_text(str(p.pid))
         deadline=time.monotonic()+seconds
         try:
+            active.write_text(str(p.pid))
             while p.poll() is None:
                 if tick: tick()
                 if time.monotonic()>deadline or log.stat().st_size>8_000_000:
                     os.killpg(p.pid,signal.SIGKILL); p.wait(); return -1
                 time.sleep(.5)
-            return p.returncode
+            return -1 if log.stat().st_size>8_000_000 else p.returncode
         finally:
             # Also clean test children which outlived their parent.
             try: os.killpg(p.pid,signal.SIGKILL)
             except ProcessLookupError: pass
+            p.wait()
             active.unlink(missing_ok=True)
 
 def check(root,config,ident,artifacts,serial,tick=None):

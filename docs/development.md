@@ -36,6 +36,8 @@ herdr-app check herdr/mods/repo-portrait  # if this mod changed
 The test runner stages repository sources with an empty HOME, isolated Git
 settings and temporary repositories. Agent calls are mocked. It must not borrow
 installed workflow scripts, contact paid agents, or push product branches.
+Review-worker tests run harmless local Python checks and substitute the model boundary.
+They verify allowance reservation before launch, source freshness and failure paths.
 Native Herdr checks test loading/rendering; deferred UI actions still need
 interaction checks. One green command doesn't cover the whole application.
 

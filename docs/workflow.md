@@ -68,7 +68,8 @@ The guided review workflow still requires independent verification. A title
 change doesn't need a ceremonial two-hour test marathon.
 
 Changed source or test commands invalidate old evidence. Missing results,
-duplicate IDs and altered logs block completion. Status is read-only; it never
+duplicate test results and altered logs block completion. Review reruns keep
+separate logs; every attempt must pass. Status is read-only; it never
 spends Claude allowance or grants permission to merge.
 
 ## Fresh conversation, same work

@@ -268,3 +268,49 @@ class ReviewAllowance(unittest.TestCase):
         for state in ("preflight", "reviewing"):
             with self.subTest(state=state), self.assertRaises(RuntimeError):
                 C.R.reserve(dict(cycle="busy", calls=1, state=state), False, True)
+
+
+class ReviewRerunEvidence(unittest.TestCase):
+    def test_review_accepts_distinct_passing_attempts_but_checks_every_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = []
+            for name in ("first.log", "rerun.log"):
+                (root / name).write_text("passed\n")
+                rows.append(
+                    dict(
+                        id="browser",
+                        argv=["test"],
+                        exit_code=0,
+                        log=name,
+                        sha256=hashlib.sha256((root / name).read_bytes()).hexdigest(),
+                    )
+                )
+            args = (
+                root,
+                {"checks": ["browser"]},
+                {"state": "verified"},
+                {"checks": [{"id": "browser", "argv": ["test"]}]},
+                rows,
+                "verified",
+            )
+            C.validate_evidence(*args)
+            with self.assertRaises(RuntimeError):
+                C.validate_evidence(
+                    root,
+                    {"checks": ["browser"]},
+                    {"state": "passed"},
+                    args[3],
+                    rows,
+                    "passed",
+                )
+            for mutation in ("failed", "changed", "duplicate"):
+                changed = copy.deepcopy(rows)
+                if mutation == "failed":
+                    changed[0]["exit_code"] = 1
+                if mutation == "changed":
+                    changed[0]["sha256"] = "wrong"
+                if mutation == "duplicate":
+                    changed[1] = copy.deepcopy(changed[0])
+                with self.subTest(mutation=mutation), self.assertRaises(RuntimeError):
+                    C.validate_evidence(*args[:4], changed, "verified")

@@ -90,30 +90,33 @@ def validate_evidence(
         not isinstance(x, dict) or not isinstance(x.get("id"), str) for x in rows
     ):
         fail("Invalid recorded check results; rerun the configured checks")
-    results = {x["id"]: x for x in rows}
-    if len(results) != len(rows):
+    result_ids = {x["id"] for x in rows}
+    # A review may rerun a check up to three times. Each attempt must retain
+    # its own passing log; never silently overwrite the earlier evidence.
+    if expected_state != "verified" and len(result_ids) != len(rows):
         fail("Duplicate evidence IDs")
-    if complete_run and set(results) != set(declared):
+    logs = [x.get("log") for x in rows]
+    if any(not isinstance(log, str) for log in logs) or len(set(logs)) != len(logs):
+        fail("Each check attempt needs a distinct evidence log")
+    if complete_run and result_ids != set(declared):
         fail("Recorded run is missing configured checks or contains unknown checks")
     for ident in plan["checks"]:
-        x = results.get(ident)
-        command = declared.get(ident)
-        if not x or not command:
+        if ident not in result_ids or ident not in declared:
             fail("No recorded result for selected check " + ident)
+    for row in rows:
+        command = declared.get(row["id"])
         if (
-            type(x.get("exit_code")) is not int
-            or x["exit_code"] != 0
-            or x.get("argv") != command["argv"]
+            not command
+            or type(row.get("exit_code")) is not int
+            or row["exit_code"] != 0
+            or row.get("argv") != command["argv"]
         ):
-            fail("Check did not pass as configured: " + ident)
-        log = R.safe(root, x["log"])
-        if not log.is_file() or hashlib.sha256(log.read_bytes()).hexdigest() != x.get(
+            fail("Check did not pass as configured: " + row["id"])
+        log = R.safe(root, row["log"])
+        if not log.is_file() or hashlib.sha256(log.read_bytes()).hexdigest() != row.get(
             "sha256"
         ):
-            fail("Missing or changed evidence log: " + ident)
-    # Never hide a failed check by selecting only passing results.
-    if any(type(x.get("exit_code")) is not int or x["exit_code"] != 0 for x in rows):
-        fail("Recorded run contains failed/incomplete checks")
+            fail("Missing or changed evidence log: " + row["id"])
 
 
 def evaluate(ctx, require_review=False):

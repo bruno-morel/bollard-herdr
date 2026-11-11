@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Explicit, bounded test reruns shared by Herdr desktop and TUI. Never calls Claude."""
 import argparse
+from repo_checks import validate_commands
 from repo_risk_policy import POLICY as RISK_POLICY
 import hashlib
 import importlib.util
@@ -42,23 +43,15 @@ def validate_checks(root,c):
     checks=c.get('checks') if isinstance(c,dict) else None
     # Validate checks independently: review criteria must include integration/e2e, a test rerun need not.
     if not isinstance(c,dict) or c.get('version')!=1:fail('Test configuration needs version 1')
-    if not isinstance(checks,list) or not 1<=len(checks)<=8:fail('Declare 1–8 finite checks')
-    ids=set()
-    for x in checks:
-        if not isinstance(x,dict) or not isinstance(x.get('id'),str) or not re.fullmatch('[a-z0-9-]{1,40}',x['id']) or x['id'] in ids:fail('Check IDs must be unique lowercase names')
-        ids.add(x['id'])
-        if x.get('kind') not in ('unit','integration','e2e','static'):fail('Invalid check kind')
-        if not isinstance(x.get('argv'),list) or not x['argv'] or not all(isinstance(s,str) and s and '\0' not in s for s in x['argv']):fail('Each check needs a nonempty argv array')
-        cwd=x.get('cwd','.')
-        if not isinstance(cwd,str) or '\0' in cwd or (cwd!='.' and (Path(cwd).is_absolute() or '..' in Path(cwd).parts)):fail('Check cwd must be inside this checkout')
+    validate_commands(checks)
+    for check in checks:
+        cwd=check.get('cwd','.')
         if not (root if cwd=='.' else R.safe(root,cwd)).is_dir():fail('Check working directory is missing')
-        if type(x.get('timeout',120)) is not int or not 1<=x.get('timeout',120)<=300:fail('Timeout must be 1–300 seconds')
-    if sum(x.get('timeout',120) for x in checks)>1200:fail('Total test timeouts cannot exceed 20 minutes')
     return {'version':1,'base':'HEAD','checks':checks}
 
 def fingerprint(root,stream,c):
     # Test reruns send no source to a model; use Git-backed freshness checks.
-    return R.fingerprint(root,stream,c,source_limit=None)
+    return R.fingerprint(root,stream,c)
 def active_guard(root,stream,review,key):
     rs=R.read(review/'state.json',{})
     if rs.get('state') in ('preflight','reviewing'):fail('Review is active; wait for its checks to finish')
