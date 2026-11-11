@@ -53,7 +53,8 @@ Atomic replacement prevents torn JSON; it doesn't resolve competing decisions.
 ## Check a change
 
 ```sh
-brew install glow node@22         # test tools, not runtime dependencies
+brew install glow                # Markdown rendering in the TUI
+brew install node@22             # development checks only
 export PATH="$(brew --prefix node@22)/bin:$PATH"
 python3 desktop_build.py          # regenerate packaged helpers
 python3 tests/run.py

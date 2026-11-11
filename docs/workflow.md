@@ -49,8 +49,8 @@ pane's context. Claude is reserved for review, not every passing thought.
 ## First test run
 
 Use **First tests run** in the Tests panel. A read-only Codex/Cursor child inspects
-the project's runners, writes the check list, then starts the first run. The lead
-stays available. No Claude call.
+the project's runners and proposes checks. The controller validates and saves
+them, then starts the first run. The lead stays available. No Claude call.
 
 For the CLI, get the lead's terminal ID with `hc ls`, then substitute it below:
 
