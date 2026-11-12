@@ -128,7 +128,7 @@ export default class Info extends View {
     .children(publishedPorts([s],c?.on).map(p=>h_flex().gap(4).items_center().flex_none()
      .child(div().px(6).py(2).rounded(5).bg(t.selected).text_color(t.foreground).text_size(12).font_semibold().tooltip(p.target+'/'+p.protocol+' · '+p.note).child(':'+p.port))
      .when(!!p.address,r=>r.child(button('address-'+p.key,'Copy address',(_e,cx)=>{cx.write_to_clipboard(p.address);notify({title:'Address copied',body:p.address});},{icon:'copy',compact:true}).tooltip(p.address+' · '+p.note)))
-     .when(!!p.url,r=>r.child(button('url-'+p.key,p.suggested?'Copy suggested URL':'Copy URL',(_e,cx)=>{cx.write_to_clipboard(p.url);notify({title:'URL copied',body:p.url});},{icon:'external',compact:true}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note))))))
+     .when(!!p.url,r=>r.child(button('url-'+p.key,'Open in browser',(_e,cx)=>cx.open_url(p.url),{icon:'external',compact:true}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note))))))
     .child(h_flex().gap(6).items_center().flex_wrap()
      .child(div().flex_1().text_size(10).text_color(t.muted).child(ok?'Up '+duration(s.UptimeSeconds):'Stopped'))
      .when(!!ram,e=>e.child(h_flex().gap(5).items_center().flex_none()

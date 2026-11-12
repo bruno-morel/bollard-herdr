@@ -344,8 +344,8 @@ role dropdown.
 
 The optional right-hand information panel’s **Docker containers** view shows
 compact published-port badges aligned right with their copy controls inside each
-container card. Container port/protocol and RAM-limit details are available on hover. The main Docker pane stays focused on logs. Copy the host address, or copy a web URL when the
-protocol is declared or suggested by a common web port. Suggested URLs are
+container card. Container port/protocol and RAM-limit details are available on hover. The main Docker pane stays focused on logs. Use the copy icon to copy the host address, or the browser icon to open a web URL
+when the protocol is declared or suggested by a common web port. Suggested URLs are
 labelled; the panel does not probe the service. Remote addresses use the Docker
 host, not the laptop. Remote loopback bindings need an SSH tunnel and do not
 get a misleading clickable web URL. Database and UDP ports remain plain addresses.
