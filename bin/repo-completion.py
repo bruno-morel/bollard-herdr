@@ -50,6 +50,30 @@ def assessment(root, stream):
             or value.strip().lower().startswith(("todo", "tbd", "replace"))
         ):
             fail("Fill validation-plan.json " + field + " with an actual assessment")
+    # Optional for existing streams: never force an in-flight assessment migration.
+    # New templates opt in; these checks catch contradictory declarations, not
+    # arbitrary program semantics. Evidence/review checks below remain mandatory.
+    if "change_type" in p:
+        change = p["change_type"]
+        if change not in ("visual", "behavioral", "mixed", "documentation"):
+            fail("Choose change_type visual, behavioral, mixed or documentation")
+        behaviors = p.get("behavior_changes")
+        if not isinstance(behaviors, list) or any(
+            not isinstance(x, str) or len(x.strip()) < 8 for x in behaviors
+        ):
+            fail("behavior_changes must list concrete changed interactions/contracts (or be empty)")
+        if change in ("visual", "documentation") and (behaviors or p["risk"] != "low"):
+            fail("Visual/documentation-only assessment requires low risk and no behavior_changes; reassess as behavioral or mixed")
+        if change in ("behavioral", "mixed") and (not behaviors or p["risk"] == "low"):
+            fail("Behavioral/mixed changes need behavior_changes and at least medium risk, with affected behavioral tests")
+        if p.get("validation_scope") not in ("focused", "broad"):
+            fail("Choose validation_scope focused or broad")
+        reason = p.get("broad_reason", "")
+        if p["validation_scope"] == "broad" and (
+            not isinstance(reason, str) or len(reason.strip()) < 20
+            or reason.strip().lower().startswith(("todo", "tbd", "replace"))
+        ):
+            fail("Broad validation needs broad_reason explaining impact, mandatory checks or release scope")
     ids = p.get("checks")
     if (
         not isinstance(ids, list)
@@ -86,6 +110,11 @@ def validate_evidence(
             + "; passing, current results are required"
         )
     declared = {x["id"]: x for x in config["checks"]}
+    if plan.get("change_type") in ("visual", "behavioral", "mixed") and not any(
+        declared.get(ident, {}).get("kind") in ("unit", "integration", "e2e")
+        for ident in plan["checks"]
+    ):
+        fail("Selected checks need a component/behavioral test; static checks alone do not validate this change")
     if not isinstance(rows, list) or any(
         not isinstance(x, dict) or not isinstance(x.get("id"), str) for x in rows
     ):
@@ -280,6 +309,10 @@ def main():
         template = dict(
             version=1,
             risk="low",
+            change_type="unassessed",
+            behavior_changes=[],
+            validation_scope="focused",
+            broad_reason="",
             scope="TODO describe this change only",
             rationale="TODO explain behavior, blast radius and reversibility",
             coverage="TODO explain why these focused checks cover the change; identify deliberate omissions",

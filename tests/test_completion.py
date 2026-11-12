@@ -111,6 +111,58 @@ class Completion(unittest.TestCase):
             before, {p: p.read_bytes() for p in self.runtime.rglob("*") if p.is_file()}
         )
 
+    def test_visual_assessment_keeps_one_focused_check_and_no_review(self):
+        self.plan.update(change_type="visual", behavior_changes=[], validation_scope="focused")
+        self.save_plan()
+        self.save_pass()
+        result = C.evaluate(self.ctx)
+        self.assertEqual(result["state"], "completed")
+        self.assertFalse(result["independent_review"])
+
+    def test_contradictory_visual_and_behavioral_assessments_block(self):
+        for change, risk, behaviors in (
+            ("visual", "low", ["Changed dialog focus restoration"]),
+            ("visual", "medium", []),
+            ("behavioral", "low", ["Changed dialog focus restoration"]),
+            ("mixed", "medium", []),
+            ("visual", "low", "none"),
+            ("unassessed", "low", []),
+        ):
+            with self.subTest(change=change, risk=risk, behaviors=behaviors):
+                self.plan.update(change_type=change, risk=risk, behavior_changes=behaviors,
+                                 validation_scope="focused")
+                self.save_plan()
+                with self.assertRaises(RuntimeError):
+                    C.assessment(self.root, "demo")
+
+    def test_broad_scope_needs_reason_but_required_regression_is_allowed(self):
+        self.plan.update(change_type="visual", behavior_changes=[], validation_scope="broad")
+        self.save_plan()
+        with self.assertRaisesRegex(RuntimeError, "broad_reason"):
+            C.assessment(self.root, "demo")
+        self.plan["broad_reason"] = "Repository policy requires its complete browser suite."
+        self.save_plan()
+        self.save_pass()
+        self.assertEqual(C.evaluate(self.ctx)["state"], "completed")
+
+    def test_behavioral_scope_retains_review_requirement_and_rejects_static_only(self):
+        self.plan.update(change_type="behavioral", risk="medium",
+                         behavior_changes=["Changed dialog focus restoration"],
+                         validation_scope="focused")
+        self.save_plan()
+        self.save_pass()
+        with self.assertRaisesRegex(RuntimeError, "independent review"):
+            C.evaluate(self.ctx)
+        self.plan["review_deferred_reason"] = "Independent review pending before merge; no approval claimed."
+        self.save_plan()
+        self.save_pass()
+        self.assertEqual(C.evaluate(self.ctx)["state"], "completed-with-limitations")
+        self.config["checks"][0]["kind"] = "static"
+        C.R.write(self.packet / "tests-input.json", self.config)
+        self.save_pass()
+        with self.assertRaisesRegex(RuntimeError, "static checks alone"):
+            C.evaluate(self.ctx)
+
     def test_source_and_command_changes_make_results_stale(self):
         for path in (self.root / "app.txt", self.packet / "tests-input.json"):
             with self.subTest(path=path.name):

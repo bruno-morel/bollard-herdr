@@ -86,6 +86,39 @@ review or a written deferral; high risk also needs recovery/rollback notes.
 The guided review workflow still requires independent verification. A title
 change doesn't need a ceremonial two-hour test marathon.
 
+New validation plans distinguish **visual**, **behavioral**, **mixed** and
+**documentation** changes. For visual edits, preserve existing dialog, focus,
+event and state behavior. Select focused component/browser checks using the
+project's runners; do not expand a wording request into a dialog rewrite.
+
+The additional assessment fields are small:
+
+```json
+"change_type": "visual",
+"behavior_changes": [],
+"validation_scope": "focused",
+"broad_reason": ""
+```
+
+Changing focus, permission decisions, counters or persistence is behavioral,
+even in a UI component. Record it in `behavior_changes`, use at least medium
+risk (high for sensitive behavior), and cover the affected interactions and
+failure cases. The completion gate rejects contradictory declarations and
+static-only evidence for visual/behavioral changes. It cannot prove that an
+agent has classified arbitrary code correctly; review remains important.
+
+Use `validation_scope: "broad"` with a concrete `broad_reason` when impact,
+mandatory repository checks or release scope requires regression. High risk
+still needs comprehensive affected-system coverage and recovery notes.
+Existing plans remain compatible; running conversations need no migration.
+New `--init` templates require choosing a change type before completion.
+
+Stop after the chosen checks pass. Inspect failures before retrying; one
+focused diagnostic retry for a suspected environment timeout is reasonable.
+Preserve the original failure and report recurring/unrelated blockers rather
+than silently starting another broad fix/test cycle. A retry is not proof that
+a test is reliable. No test or review limits are increased by this policy.
+
 Changed source or test commands invalidate old evidence. Missing results,
 duplicate test results and altered logs block completion. Review reruns keep
 separate logs; every attempt must pass. Status is read-only; it never
