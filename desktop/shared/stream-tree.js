@@ -37,3 +37,18 @@ export function withoutLaneState(value, id, prefixed=false) {
  return Object.fromEntries(Object.entries(value || {}).filter(([key]) =>
    prefixed ? !key.startsWith(id+':') : key !== id));
 }
+
+// Herdr may remove a terminal-backed node when its old terminal is deleted.
+// Restore the view slot, not the agent: sync binds it to the current live lead.
+export function ensureConversation(tree, lane) {
+ const existing=findNode(tree,lane+'-conversation');
+ if(existing)return existing;
+ const parent=findNode(tree,lane+'-body');
+ if(!parent)return null;
+ const node={id:lane+'-conversation',type:'block',
+  content:{mod:'repo-portrait',props:{kind:'empty',lane}},
+  size:{weight:3},min:240,background:'background',
+  border:{width:1,color:'border'},radius:8};
+ parent.children=[node,...(parent.children||[])];
+ return node;
+}

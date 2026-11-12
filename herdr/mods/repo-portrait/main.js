@@ -15,7 +15,8 @@ import {
   removeLane,
   withoutLaneState,
   laneIds,
-  findNode
+  findNode,
+  ensureConversation
 } from './stream-tree.js';
 import {
   COMPLETE,
@@ -394,7 +395,9 @@ export default class Portrait extends View {
     for (const lane of laneIds(copy)) {
       const c = laneConfig(lane),
         lead = leadFor(terminals(), c),
-        body = find(copy, lane + '-conversation');
+        existingBody = find(copy, lane + '-conversation'),
+        body = ensureConversation(copy, lane);
+      if (body && !existingBody) changed = true;
       const content = lead ? {
         terminal: lead.address
       } : {
