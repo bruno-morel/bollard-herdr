@@ -1,3 +1,4 @@
+import {attentionRows,focusAttention} from './attention.js';
 import {
   operation,
   stepText,
@@ -207,6 +208,14 @@ export default class Portrait extends View {
           if (/^window-[a-z0-9-]+$/.test(cmd)) {
             this.openWindow(cmd.slice(7), cx);
             continue;
+          }
+          if (cmd.startsWith('attention-focus:')) {
+            const target=JSON.parse(decodeURIComponent(cmd.slice(16)));
+            if(target.exact && laneIds(layout()).includes(target.lane)){
+              view(target.lane,null);
+              run('pane.focus',{terminal:target.terminal});
+            }else run('terminal.peek',{terminal:target.terminal});
+            cx.notify();continue;
           }
           if (cmd.startsWith('retry-checkpoint:')) {
             this.newConversation(JSON.parse(decodeURIComponent(cmd.slice(17))), cx, true);
@@ -502,10 +511,24 @@ export default class Portrait extends View {
         })))
         .child(div().text_size(11).text_color(t.muted).child('Stage reports show activity. Only verification confirms the saved checkpoint.'));
     }
+    if (this.kind === 'attention') {
+      const waiting=attentionRows(terminals());
+      return v_flex().p(10).gap(5).bg(t.background).text_color(t.foreground)
+        .child(div().px(8).py(4).font_semibold().child(waiting.length+' agents need you'))
+        .children(waiting.map(row=>control('attention-'+row.address,row.display+' · '+row.reason,()=>{
+          closeOverlay();focusAttention(row);
+        },{icon:'message',tone:row.reason==='Waiting for input'?'attention':'ready'})))
+        .when(!waiting.length,e=>e.child(div().px(8).py(6).text_color(t.muted).child('All caught up')));
+    }
     if (this.kind === 'manager') {
       this.sync();
+      const waiting=attentionRows(terminals());
       return h_flex().size_full().pl(85).pr(10).gap(8).items_center().bg(t.chrome)
         .child(div().flex_1().text_size(13).font_semibold().text_color(t.foreground).child(this.error || p.windowTitle || 'Studio / Work · Portrait'))
+        .child(control('portrait-attention',waiting.length ? waiting.length+' agent'+(waiting.length===1?' needs':'s need')+' you' : 'All caught up',()=>{
+          if(waiting.length===1)focusAttention(waiting[0]);
+          else openOverlay({mod:'repo-portrait',kind:'popup',width:430,props:{kind:'attention'}});
+        },{icon:'message',tone:waiting.length?'attention':null}).rounded(4))
         .child(control('portrait-sidebar', 'Spaces & agents', () => run('layout.toggle', {
           id: 'sidebar'
         }), {

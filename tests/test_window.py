@@ -43,3 +43,30 @@ class Windows(unittest.TestCase):
             args = run.call_args.args[0]
             self.assertEqual(args[1:3], ['do', 'pane.focus'])
             self.assertEqual(json.loads(args[3]), {'terminal': 'host/t1'})
+
+    def test_attention_matches_exact_window_before_stream_and_ignores_unmanaged(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d).resolve();child=root/'screens/w-child';child.mkdir(parents=True)
+            W.save(root/'shared.json',{'repo.portrait.lanes':{'top':dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t1')}})
+            W.save(child/'repo-window.json',dict(origin=str(root)))
+            W.save(child/'shared.json',{'repo.portrait.lanes':{'bottom':dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t2')}})
+            (root/'screens/a.lock').touch()
+            ctx=dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t2')
+            with patch.object(Path,'is_socket',return_value=True):
+                matches=W.agent_windows(root,ctx)
+            self.assertEqual(matches[0][1],child)
+            self.assertTrue(matches[0][3])
+            self.assertEqual(len(matches),2)
+
+    def test_attention_focus_never_launches_window_or_agent(self):
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d)
+            with patch.object(W,'agent_windows',return_value=[(0,home,'top',True)]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0)) as run,patch.object(W,'activate_window') as activate,patch.object(W.sp,'Popen') as spawn:
+                result=W.focus_agent(home,{'terminal':'box/t2'})
+            self.assertTrue(result['found']);spawn.assert_not_called();activate.assert_called_once_with(home)
+            self.assertIn('repo-portrait.attention-focus:',run.call_args.args[0][2])
+
+    def test_attention_without_open_window_returns_fallback(self):
+        with patch.object(W,'agent_windows',return_value=[]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'Popen') as spawn:
+            self.assertFalse(W.focus_agent(Path('/app'),{'terminal':'box/t2'})['found'])
+            spawn.assert_not_called()

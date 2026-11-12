@@ -2,6 +2,7 @@
 """Open an independent Herdr window on the same core; never launch an agent."""
 import argparse,copy,fcntl,hashlib,json,os,re,shutil,subprocess as sp,sys,time
 from pathlib import Path
+from urllib.parse import quote
 
 def load(path,default=None):
  try:return json.loads(path.read_text())
@@ -133,9 +134,61 @@ def launch_window(destination,context):
   time.sleep(.3)
  raise RuntimeError('Herdr is still opening. Click the window again shortly; its profile is preserved.')
 
+def agent_windows(source, context):
+ origin=Path((load(source/'repo-window.json',{}) or {}).get('origin',str(source))).resolve()
+ profiles=[origin]+sorted((origin/'screens').glob('*'))
+ matches=[]
+ for home in profiles:
+  if not home.is_dir():continue
+  if home!=origin:
+   owner=(load(home/'repo-window.json',{}) or {}).get('origin')
+   if not owner or Path(owner).resolve()!=origin:continue
+  if not (home/'herdr-app.sock').is_socket():continue
+  state=load(home/'shared.json',{}) or {}
+  for lane,c in state.get('repo.portrait.lanes',{}).items():
+   exact=c.get('terminal')==context.get('terminal')
+   parent=c.get('terminal')==context.get('parent') and bool(context.get('parent'))
+   same=(bool(context.get('cwd')) and c.get('cwd')==context['cwd'] and c.get('on')==context.get('on')
+         and c.get('stream')==context.get('stream') and (c.get('role')==context.get('role') or context.get('role')=='helper'))
+   if exact or parent or same:matches.append((0 if exact else 1 if parent else 2,home,lane,exact))
+ return sorted(matches,key=lambda x:(x[0],str(x[1])))
+
+
+def activate_window(home):
+ if sys.platform!='darwin':raise RuntimeError('Automatic window activation currently requires macOS.')
+ # Find the process serving this exact profile, not every Herdr application.
+ result=sp.run(['/usr/sbin/lsof','-t','-a','-U',str(home/'herdr-app.sock')],capture_output=True,text=True,timeout=3)
+ pids=list(dict.fromkeys(x for x in result.stdout.split() if x.isdigit()))
+ if len(pids)!=1:raise RuntimeError('Could not identify the window process; no other window was activated.')
+ script='ObjC.import("AppKit"); function run(args) { var app=$.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(args[0])); if (!app || !app.activateWithOptions(3)) throw Error("Could not activate Herdr window"); }'
+ result=sp.run(['/usr/bin/osascript','-l','JavaScript','-e',script,pids[0]],capture_output=True,text=True,timeout=5)
+ if result.returncode:raise RuntimeError(result.stderr.strip() or 'Could not activate the existing window.')
+
+
+def focus_agent(source,context):
+ terminal=context.get('terminal')
+ if not isinstance(terminal,str) or not terminal:raise RuntimeError('Choose an agent to show.')
+ executable=shutil.which('herdr-app')
+ if not executable:raise RuntimeError('Herdr desktop launcher is unavailable.')
+ for _,home,lane,exact in agent_windows(source,context):
+  env=dict(os.environ,HERDR_APP_HOME=str(home))
+  try:
+   status=sp.run([executable,'status'],env=env,capture_output=True,text=True,timeout=2)
+   if status.returncode:continue
+  except sp.TimeoutExpired:continue
+  # Let the destination's own manager update its shared tool selection too.
+  payload=quote(json.dumps({'lane':lane,'terminal':terminal,'exact':exact}),safe='')
+  result=sp.run([executable,'do','repo-portrait.attention-focus:'+payload],env=env,capture_output=True,text=True,timeout=3)
+  if result.returncode:raise RuntimeError(result.stderr or result.stdout or 'Could not focus the agent.')
+  activate_window(home)
+  return {'found':True,'home':str(home),'terminal':terminal}
+ return {'found':False,'terminal':terminal}
+
+
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['open']);p.add_argument('--source',type=Path,required=True);p.add_argument('--lane',required=True);p.add_argument('--context',type=json.loads);a=p.parse_args()
- print(json.dumps(open_window(a.source.resolve(),a.lane,a.context)))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['open','focus-agent']);p.add_argument('--source',type=Path,required=True);p.add_argument('--lane');p.add_argument('--context',type=json.loads);a=p.parse_args()
+ if a.action=='open' and not a.lane:p.error('--lane is required for open')
+ print(json.dumps(focus_agent(a.source.resolve(),a.context or {}) if a.action=='focus-agent' else open_window(a.source.resolve(),a.lane,a.context)))
 if __name__=='__main__':
  os.umask(0o077)
  try:main()

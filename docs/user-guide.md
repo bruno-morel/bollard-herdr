@@ -56,6 +56,7 @@ the right. Changing one view's tool does not change the other stream.
 
 | Window control | What it does |
 | --- | --- |
+| Agents need you | Count waiting agents and unread finished responses across connected machines/windows. Click to focus the existing window; choose an agent when several need attention. |
 | Spaces & agents | Show/hide the sidebar for browsing spaces and agent activity. |
 | Add stream → Below | Add a stream view in a vertical stack. |
 | Add stream → Beside | Add a view alongside the others. |
@@ -64,6 +65,12 @@ the right. Changing one view's tool does not change the other stream.
 | Remove stream view | Choose a layout slot to remove. This removes the view, not the Git branch or agent. |
 | Repository / stream name | Reopen the picker to change what this slot displays. |
 | Information icon | Show/hide this stream's information rail. |
+
+The attention indicator appears before the window controls. Ordinary idle agents
+are not counted, and the same terminal in multiple views is counted once. Helpers
+open in their stream’s window. If no matching window is open, the conversation
+is shown in the current window without starting another agent. Window activation
+is supported on macOS; navigation does not consume model allowance.
 
 The toolbar groups related tools: **Conversation / Questions**, **Docs / Files /
 Git**, and **Tests / Review**. A group's title follows the selected tool. **Actions**
