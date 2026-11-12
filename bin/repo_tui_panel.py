@@ -451,6 +451,8 @@ class Panel:
         return self.dialog(lambda: self.ui.busy(title, fn))
 
     def action(self, name):
+        if name == "tests-run":
+            return self.run_tests()
         if name == "home":
             self.switch("home")
             control(self.lane, reattach=True, detached=False)
@@ -826,6 +828,16 @@ class Panel:
         if d.get("state") in ("queued", "running", "preparing"):
             self.message = "Tests are already running."
             return
+        if d.get("failure_prompt"):
+            if status(self.cache.get("lead", self.row)) not in ("idle", "done"):
+                self.message = "Find why and fix is available when the agent is idle. Nothing sent."
+                return
+            out = self.busy("Requesting focused fix…", lambda: self.b.work(
+                self.row, "tests", "fix", W.label(self.row, "stream"),
+                "--target", self.address.rsplit("/", 1)[-1], "--json"))
+            self.message = out.get("message", "Fix requested; follow the conversation.")
+            self.last["tests"] = 0
+            return
         agent = "codex"
         if not d.get("configured"):
             agent = self.choose(
@@ -1057,7 +1069,7 @@ class Panel:
                 "files": "a All/modified · / Filter · Enter open · Tab preview",
                 "git": "Enter diff · Tab preview · / Filter",
                 "docker": "p Freeze · End follow · y Copy · R Start",
-                "tests": "R Run tests · Enter logs · h Helper",
+                "tests": "R Find why and fix · Enter logs" if self.cache.get("tests", {}).get("failure_prompt") else "R Run tests · Enter logs",
                 "review": "K Check completion · R Review actions",
                 "questions": "Enter: open the exact question",
                 "agents": "Enter: open agent · Ctrl+\\: return",
@@ -1395,14 +1407,10 @@ class Panel:
             if self.preview:
                 self.paint_text(self.preview.get("text", ""), y, 1, height, w - 1)
             else:
-                self.ui.put(
-                    y,
-                    1,
-                    d.get("state", "Loading…")
-                    + " · R: "
-                    + ("Rerun tests" if d.get("configured") else "First tests run"),
-                    self.ui.color(1),
-                )
+                self.button(y, 1,
+                    "R Find why and fix" if d.get("failure_prompt") else
+                    "R Rerun tests" if d.get("configured") else "R First tests run",
+                    "tests-run", color=4 if d.get("failure_prompt") else 1)
                 self.index = max(0, min(self.index, len(self.rows) - 1))
                 start = max(0, self.index - height + 3)
                 for i, row in enumerate(self.rows[start : start + height - 2], start):
@@ -1702,6 +1710,8 @@ class Panel:
                 self.index = 0
             return
         if k == "h":
+            if self.tab == "tests":
+                return
             return self.helper()
         if k == "y":
             return self.copy()

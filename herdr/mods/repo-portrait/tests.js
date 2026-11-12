@@ -1,6 +1,5 @@
-import {reportPanel} from './signals.js';
+import {reportPanel,agentState} from './signals.js';
 import {resultsView} from './test-results.js';
-import {askHelper} from './helper.js';
 import {View,div,svg} from 'gpui-kit';
 import {v_flex,h_flex,Editor,EditorState} from 'gpui-base';
 import {exec,theme,props,terminals,shared,settings,notify,run} from 'herdr';
@@ -8,11 +7,12 @@ import {scopedLocation,leadFor,VIEWS} from './scope.js';
 import {toolColors,button,caption,view} from './ui.js';
 
 // Setup, running and rerunning are different states, not one misleading button.
-export function primaryAction(s,busy=false,pending=false){
+export function primaryAction(s,busy=false,pending=false,ready=true){
  if(busy)return {label:'Working…',disabled:true};
  if(!s)return {label:'Loading tests…',disabled:true};
  if(s.state==='preparing')return {label:'Preparing first run…',disabled:true};
  if(['queued','running'].includes(s.state))return {label:'Tests running…',disabled:true};
+ if(s.failure_prompt)return {label:ready?'Find why and fix':'Find why and fix · agent unavailable',action:'fix',icon:'test',disabled:!ready};
  if(!s.configured)return {label:'First tests run',action:'first',icon:'play'};
  return {label:s.results?.length?'Rerun tests':'First tests run',action:'run',icon:'play'};
 }
@@ -52,7 +52,7 @@ export default class Tests extends View {
   if(action==='first'&&this.pendingSetup)return;
   const lead=leadFor(terminals(),c),args=['tests',action,c.stream,'--json'];
   this.actionError='';
-  if(['first','send'].includes(action)){
+  if(['first','fix'].includes(action)){
    if(!lead){this.actionError='Open this stream’s lead conversation first, then try again.';cx.notify();return;}
    if(action==='first')args.push('--agent',this.setupAgent);
    args.push('--target',lead.address.split('/').pop());
@@ -73,18 +73,14 @@ export default class Tests extends View {
  render(cx){
   const c=scopedLocation(),t=theme();
   if(this.key!==c?.key){this.key=c?.key;this.generation++;this.busy=false;this.data=null;this.error='';this.actionError='';this.pendingSetup=false;this.chosen=null;this.showCommands=false;this.logOpen=false;this.editor.set_value('');this.refresh(cx,true);}
-  const s=this.data,action=primaryAction(s,this.busy,this.pendingSetup),missing=!!s&&!s.configured,lead=leadFor(terminals(),c);
+  const s=this.data,lead=leadFor(terminals(),c),ready=!!lead&&['idle','done'].includes(agentState(lead)),action=primaryAction(s,this.busy,this.pendingSetup,ready),missing=!!s&&!s.configured&&!s.failure_prompt;
   reportPanel('tests',c,this.error||this.actionError||['failed','incomplete'].includes(s?.state));
-  const label=missing?(this.pendingSetup?'Preparing checks':'Setup needed'):(s?.state||'Loading…');
   return v_flex().size_full().min_h(0).p(4).bg(toolColors().background).text_color(t.foreground).gap(6)
    .child(h_flex().px(12).py(6).gap(8).items_center().flex_wrap().justify_end().flex_none()
-    .child(div().flex_1().font_semibold().text_size(13).child('Tests · '+label))
     .when(missing&&!this.pendingSetup,e=>e.child(h_flex().gap(4).children(['codex','claude','cursor'].map(a=>button('tests-agent-'+a,a,(_e,cx)=>{if(!this.busy){this.setupAgent=a;cx.notify();}},{selected:this.setupAgent===a})))))
     .child(button('tests-primary',action.label,(_e,cx)=>{if(!action.disabled)this.action(action.action,cx);},{icon:action.icon||'test',strong:true}).opacity(action.disabled ? 0.55 : 1))
     .when(!!s?.configured,e=>e.child(button('tests-commands',this.showCommands?'Hide commands':'Show commands',(_e,cx)=>{this.showCommands=!this.showCommands;cx.notify();},{icon:'list',selected:this.showCommands})))
     .when(!!s?.setup_terminal,e=>e.child(button('tests-child','Open test helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.setup_terminal}),{icon:'agents'})))
-    .when(!!s?.failure_prompt,e=>e.child(button('tests-send',s.state==='stale'?'Discuss old failures':'Investigate failures',(_e,cx)=>this.action('send',cx),{icon:'message'})))
-    .when(this.logOpen&&!!this.chosen,e=>e.child(button('tests-helper','Ask a helper',()=>askHelper(c,{pane:'tests',source:this.chosen,text:'Run: '+(s.token||'unknown')+' · evidence '+s.state+'\n\n'+this.editor.value(),head:s.head,observed_at:s.finished||s.started}),{icon:'agents'})))
     .child(button('tests-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
    .when(!!this.error||!!this.actionError,e=>e.child(div().px(12).text_size(12).text_color(t.blocked).child(this.actionError||this.error)))
    .when(missing,e=>e.child(v_flex().flex_1().min_h(0).id('tests-setup-scroll').overflow_y_scrollbar().p(20).gap(10)
@@ -99,7 +95,7 @@ export default class Tests extends View {
    .when(!missing,e=>e
     .child(div().px(12).child(caption(s?.message||'Runs the saved checks. No model usage for reruns.')))
     .when(s?.state==='stale',e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Historical results — not the current checkout. Tests run directly by an agent are not automatically imported here.')))
-    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('This runner reports failures; it does not edit code. Investigate failures sends evidence to your lead when idle; Ask a helper provides read-only analysis. Implement → Review is the separate bounded fix/review workflow.')))
+    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Find why and fix asks your current agent to verify the failure, make a focused fix and check it. Available when the agent is idle; no interruption, new agent or independent review. Stale results are verified first.')))
     .when(!!s?.checks,e=>e.child(div().px(12).text_size(11).text_color(t.muted).child(s.checks.length+' configured checks · Up to '+Math.ceil(s.checks.reduce((n,x)=>n+(x.timeout||120),0)/60)+' minutes'+(s.current?' · Running '+s.current:''))))
     .when(!!s?.setup_summary,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.setup_summary+' · '+s.setup_limitations)))
     .when(this.showCommands,e=>e.child(v_flex().id('tests-commands-list').max_h(140).flex_none().overflow_y_scrollbar().px(12).py(5).gap(5)

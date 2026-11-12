@@ -189,8 +189,7 @@ Opening either panel alone does not start a model review.
 | Show / Hide commands | Inspect exactly what is configured to run. |
 | Logs / Hide logs on a result row | Read output for that check. |
 | Copy output | Copy the opened check's output. |
-| Send failures to conversation | Send the failure context to the lead; this is an explicit message to that agent. |
-| Ask a helper | Investigate the selected output separately without blocking the lead. |
+| Find why and fix | Replaces Rerun tests when failures are captured. Ask the current idle agent to verify the failure, fix its cause and run focused checks. Busy agents are never interrupted. |
 | Refresh icon | Read current run state without starting another run. |
 
 Result rows represent configured checks/commands. Detailed test counts depend on
@@ -353,7 +352,13 @@ get a misleading clickable web URL. Database and UDP ports remain plain addresse
 **Stale** test rows describe historical commands, not current code. Their original
 outcomes and logs remain available. Tests invoked directly in an agent conversation
 are not automatically imported into the Tests pane. The standalone runner only
-runs saved checks; it never fixes application code automatically. **Investigate
-failures** sends evidence to an idle lead for diagnosis; **Ask a helper** performs
-read-only analysis. **Implement → Review** is the separate bounded implementation
-and review flow, with the existing reviewer allowance.
+runs saved checks; it never fixes application code automatically. **Find why and
+fix** is the explicit repair action (also a tappable button / **R** in the TUI).
+It verifies stale failures first, handles broken runner commands as well as product
+bugs, and preserves existing changes. It does not start another agent or a Claude
+review, reset allowances, merge or push. If delivery is uncertain, inspect the
+conversation before retrying. **Implement → Review** remains the separate bounded
+implementation and independent-review flow.
+
+CLI equivalent: `work tests fix <stream> --target tID --json`. A normal model-free
+rerun remains available with `work tests run <stream>`.

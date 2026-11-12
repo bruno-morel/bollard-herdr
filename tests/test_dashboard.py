@@ -203,6 +203,16 @@ class Controls(unittest.TestCase):
         p.run_tests()
         self.assertFalse(p.calls)
 
+    def test_failure_fix_waits_for_idle_and_targets_same_conversation(self):
+        p = self.panel()
+        p.cache = {"tests": {"failure_prompt": "old failure", "state": "stale"}}
+        p.row["status"] = {"state": "working"}
+        p.run_tests()
+        self.assertFalse(p.calls)
+        p.row["status"] = {"state": "idle"}
+        p.run_tests()
+        self.assertEqual(p.calls[0][1], ("tests", "fix", "feature", "--target", "t2d", "--json"))
+
     def test_review_budget_exhausted_no_run_option(self):
         p = self.panel()
         p.cache = {"review": {"remaining": 0}}
