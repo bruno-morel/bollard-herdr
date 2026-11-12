@@ -19,6 +19,9 @@ class Installer(unittest.TestCase):
         self.dependencies = patch.object(I, "check_dependencies", return_value=True)
         self.dependencies.start()
         self.addCleanup(self.dependencies.stop)
+        self.layout = patch.object(I, "select_layout")
+        self.select_layout = self.layout.start()
+        self.addCleanup(self.layout.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
         self.source = self.root / "source"
@@ -85,6 +88,18 @@ class Installer(unittest.TestCase):
         self.assertFalse(any("studio-work-v2.toml" in x for x in desktop))
         self.assertTrue(any("studio-work-v2.toml" in x for x in tui))
         self.assertFalse(any("herdr-app/mods" in x for x in tui))
+
+    def test_first_desktop_selects_layout_but_updates_preserve_choice(self):
+        mod = self.source / "herdr/mods/example"
+        mod.mkdir(parents=True)
+        (mod / "main.js").write_text("// source")
+        self.run_install("--apply")
+        self.select_layout.assert_called_once_with(self.home)
+        self.select_layout.reset_mock()
+        self.run_install("--apply")
+        self.select_layout.assert_not_called()
+        self.run_install("--verify")
+        self.select_layout.assert_not_called()
 
     def test_screen_lock_files_are_not_installation_targets(self):
         screens = self.home / ".config/herdr-app/screens"
@@ -194,3 +209,25 @@ class Installer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LayoutSelection(unittest.TestCase):
+    def test_selection_uses_app_command_and_primary_home(self):
+        from types import SimpleNamespace
+        with patch.object(I.shutil, 'which', return_value='/bin/herdr-app'), patch.object(
+            I.subprocess, 'run', return_value=SimpleNamespace(returncode=0)
+        ) as run, contextlib.redirect_stdout(io.StringIO()):
+            I.select_layout(Path('/test/home'))
+        self.assertEqual(run.call_args.args[0][1:3], ['do', 'layout.switch'])
+        self.assertEqual(run.call_args.kwargs['env']['HERDR_APP_HOME'], '/test/home/.config/herdr-app')
+
+    def test_closed_app_prints_recovery_command(self):
+        from types import SimpleNamespace
+        output = io.StringIO()
+        with patch.object(I.shutil, 'which', return_value='/bin/herdr-app'), patch.object(
+            I.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stderr='not running', stdout='')
+        ), contextlib.redirect_stdout(output):
+            I.select_layout(Path('/test/home'))
+        self.assertIn('Open Herdr, then run:', output.getvalue())
+        self.assertIn('layout.switch', output.getvalue())
+        self.assertNotIn('Selected studio-work-portrait.', output.getvalue())

@@ -75,7 +75,9 @@ After the [prerequisites](../docs/setup.md#prerequisites), from this repo:
 ./install.sh tui --apply       # remote development host, from its own clone
 ```
 
-Choose **studio-work-portrait** in Herdr, then choose your streams.
+Keep Herdr open: the first desktop install selects **studio-work-portrait**
+automatically. Then choose your streams. Updates preserve your layout choice;
+use `./install.sh desktop --apply --select-layout` to select Bollard again.
 Use `all` instead of `desktop` to install the laptop TUI too. Desktop and TUI share
 controllers, conversations and evidence; this recipe describes the desktop.
 Credentials and runtime state stay outside Git. macOS is tested; other platforms

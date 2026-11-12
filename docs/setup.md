@@ -111,7 +111,22 @@ hc machine add your-user@your-server
 hc machine ls
 ```
 
-You can also add the server in Herdr desktop. Select **studio-work-portrait** for the desktop layout.
+You can also add the server in Herdr desktop. On the first desktop installation,
+Bollard automatically selects **studio-work-portrait** in the open primary Herdr
+window. Herdr remembers that selection. Later updates preserve your chosen
+layout, stream pins and additional windows. Keep Herdr open during installation.
+
+If Herdr was closed, the installer prints the exact selection command. To select
+Bollard explicitly on an existing installation:
+
+```sh
+./install.sh desktop --apply --select-layout
+# Or, after opening Herdr:
+herdr-app do layout.switch '{"name":"studio-work-portrait"}'
+```
+
+Selecting a layout does not create or restart agents. The flag targets the
+primary desktop window; it does not replace custom per-stream windows.
 Pick your own streams; the public layout ships without somebody else's terminal
 IDs. `laptop` and `jumpbox` remain aliases for `all` and `tui`.
 

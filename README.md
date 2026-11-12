@@ -44,7 +44,8 @@ cd bollard-herdr
 | Terminal / remote host | `./install.sh tui --apply` |
 | An update | `python3 sync.py all` |
 
-In Herdr desktop, choose **studio-work-portrait**, then **Choose a stream**.
+Keep Herdr desktop open during installation: first setup selects
+**studio-work-portrait** automatically. Then use **Choose a stream**.
 In a terminal, run `repo-tui`. No agent starts just because you installed a UI.
 Installation checks required dependencies before changing files and prints
 setup commands for anything missing. Sign in to agents and configure Docker

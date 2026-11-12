@@ -8,6 +8,8 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import tempfile
 
@@ -15,6 +17,28 @@ from desktop_build import check as check_desktop
 from install_dependencies import check as check_dependencies
 
 SOURCE = Path(__file__).resolve().parent
+
+
+def select_layout(home):
+    """Use Herdr's API so it persists the selection without replacing user state."""
+    binary = shutil.which("herdr-app")
+    command = "herdr-app do layout.switch '{\"name\":\"studio-work-portrait\"}'"
+    if not binary:
+        print("Layout installed. Open Herdr, then run: " + command)
+        return
+    env = dict(os.environ, HERDR_APP_HOME=str(home / ".config/herdr-app"))
+    try:
+        result = subprocess.run(
+            [binary, "do", "layout.switch", '{"name":"studio-work-portrait"}'],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        print("Layout installed, but automatic selection needs attention: " + str(exc))
+        print("Open Herdr, then run: " + command)
+        return
+    print("Selected studio-work-portrait. Herdr remembers this layout; conversations were not restarted.")
 
 
 def digest(data):
@@ -63,7 +87,10 @@ def main():
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--verify", action="store_true")
     mode.add_argument("--check-deps", action="store_true", help="Check prerequisites and show installation steps without changing files")
+    parser.add_argument("--select-layout", action="store_true", help="Select Bollard in the primary desktop window (requires --apply)")
     args = parser.parse_args()
+    if args.select_layout and (not args.apply or args.profile not in ("desktop", "all", "laptop")):
+        parser.error("--select-layout requires --apply and a desktop/all/laptop profile")
     ready = check_dependencies(args.profile)
     if args.check_deps:
         if not ready:
@@ -79,6 +106,9 @@ def main():
     manifest = Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) / "repo-tools/source-install.json"
     baseline = json.loads((SOURCE / "baseline.json").read_text())
     previous = json.loads(manifest.read_text()) if manifest.exists() else {}
+    first_desktop = args.profile in ("desktop", "all", "laptop") and not any(
+        key.startswith(str(home / ".config/herdr-app/mods") + os.sep) for key in previous
+    )
     plan = []
     for source, destination in targets(args.profile, home):
         if destination.is_symlink():
@@ -123,6 +153,8 @@ def main():
     changes = [entry for entry in plan if entry[1] != entry[2]]
     print(("Installing" if args.apply else "Would update"), len(changes), "files.")
     if not args.apply:
+        if first_desktop:
+            print("First desktop installation will select studio-work-portrait in the open primary Herdr window.")
         for destination, *_ in changes:
             print(destination)
         return
@@ -151,6 +183,8 @@ def main():
     print(
         "Installed and verified", len(plan), "files. Running agents were not restarted."
     )
+    if first_desktop or args.select_layout:
+        select_layout(home)
 
 
 if __name__ == "__main__":
