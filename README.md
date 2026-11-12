@@ -25,6 +25,11 @@ flowchart LR
 
 [Install the prerequisites](docs/setup.md#prerequisites), then:
 
+On macOS, the desktop app is `brew install --cask herdr-app`; the terminal app
+is `brew install herdr glow`. They are separate installs. Bollard supplies the
+workflow and layouts, not those applications; see the setup guide for `hc` and
+remote-host prerequisites.
+
 ```sh
 git clone https://github.com/bruno-morel/bollard-herdr.git
 cd bollard-herdr

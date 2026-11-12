@@ -12,14 +12,54 @@
 
 See [Agents: install, sign in, choose](agents.md) for Codex, Claude and Cursor commands and feature support.
 
-No agent binaries or credentials are bundled. On macOS, Glow is one command:
+### 1. Install Herdr itself
+
+Bollard installs scripts and layouts, **not Herdr itself**. Three names refer
+to different programs: `herdr-app` is the desktop app, `herdr` is the terminal
+app, and `hc` is the runtime that keeps agent conversations alive.
+
+For the **desktop experience on a Mac with Apple Silicon**:
 
 ```sh
-brew install glow
+brew install --cask herdr-app
+open -a Herdr
+```
+
+Open the app once before installing Bollard's desktop layout. For Linux and
+other installation options, use the [official desktop download](https://herdr.dev/download/).
+The prebuilt macOS desktop app requires Apple Silicon; an Intel remote server
+does not need the desktop app.
+
+For the **terminal experience**, install on every machine where you will run
+`repo-tui` or the Bollard `herdr` shortcut, including the SSH host for your phone:
+
+```sh
+brew install herdr glow
+```
+
+The desktop cask does not replace this terminal dependency. Without Homebrew,
+follow the [official TUI installation guide](https://herdr.dev/tui/docs/install/).
+
+For the **agent runtime**, the desktop app sets up herdr-core. On a server, or
+if `hc` is missing, use the [official core installer](https://herdr.dev/core/):
+
+```sh
+curl -fsSL https://releases.herdr.dev/core/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
+hc --version
 ```
 
 Keep that PATH entry in your shell configuration, including the remote host.
+For a terminal installation, verify the actual executable before enabling the
+shell shortcut:
+
+```sh
+command herdr --version
+glow --version
+```
+
+No agent binaries or credentials are bundled. Install and sign in to your chosen
+agent using the [agent guide](agents.md), then install Bollard below.
 
 ## Laptop + server
 
@@ -75,6 +115,7 @@ Agents keep running; reopen the TUI to load changed Python code.
 | Edited outside maintained sources | Compare that installed file with the tracked source; reconcile it before updating. |
 | Source checkout has changes | Commit or reconcile them. Sync will not stash them behind your back. |
 | Command not found | Check PATH and prerequisites on the machine actually running the command. |
+| Herdr terminal executable was not found / old `NoneType` launch traceback | Install the terminal app with `brew install herdr` on that machine, then retry `repo-tui`. Installing only the desktop app or `hc` is insufficient. Update Bollard to get the clearer dependency error. |
 | Empty layout | Choose a stream; this is not a lost conversation. |
 
 `./install.sh all` previews changes. `./install.sh all --verify` checks installed

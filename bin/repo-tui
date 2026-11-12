@@ -4,14 +4,13 @@ import argparse
 import fcntl
 import os
 from pathlib import Path
-import shutil
 import subprocess as sp
 import sys
 import time
 import repo_stream_backend as W
 from repo_tui_common import (
     BASE, Backend, SESSION, control, lane_state, layout, managed, native,
-    pane_id, read, runtime, save, state, update,
+    pane_id, read, runtime, save, state, update, tui_binary,
 )
 
 def seed():
@@ -108,13 +107,13 @@ def command(action):
         native('pane','focus','--pane',row['conversation'],'--direction','up')
 
 def launch():
-    seed()
+    binary=tui_binary()
     config=Path.home()/'.config/herdr/studio-work-v2.toml'
     if not config.is_file(): raise RuntimeError('Studio/Work TUI configuration is missing')
     env=dict(os.environ,HERDR_CONFIG_PATH=str(config),REPO_TUI_SESSION=SESSION)
     env['PATH']=os.pathsep.join([str(Path.home()/'.local/bin'),'/opt/homebrew/bin','/usr/local/bin',env.get('PATH','/usr/bin:/bin')])
     for key in ('REPO_TUI_LANE','REPO_TUI_VIEW'):env.pop(key,None)
-    binary=shutil.which('herdr',path=env['PATH'])
+    seed()
     # The server/panes survive detachment. Only a live client may confirm a file
     # was displayed; its short heartbeat expires after lost SSH connections.
     stamp=runtime()/('viewer-'+str(os.getpid())+'.json');started=time.time()*1000

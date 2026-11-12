@@ -53,10 +53,24 @@ def managed():
     # Herdr shell keybindings carry the session, but do not inherit pane variables.
     return os.environ.get('HERDR_ENV') == '1' or os.environ.get('HERDR_SESSION') == SESSION
 
+def tui_binary(path=None):
+    """Resolve the terminal application, independently of desktop and hc."""
+    search = os.pathsep.join([path if path is not None else os.environ.get('PATH', ''),
+                             str(Path.home()/'.local/bin'), '/opt/homebrew/bin', '/usr/local/bin'])
+    binary = shutil.which('herdr', path=search)
+    if not binary:
+        raise RuntimeError(
+            'Herdr terminal executable was not found. On this machine run: brew install herdr. '
+            'Alternatively follow https://herdr.dev/tui/docs/install/ . '
+            'The desktop app (herdr-app) and runtime (hc) do not replace the terminal app. '
+            'Then reopen your shell and run repo-tui.'
+        )
+    return binary
+
 def native(*args):
     if not managed():
         raise RuntimeError('Open this control inside the Studio/Work TUI')
-    r = sp.run([shutil.which('herdr') or str(Path.home()/'.local/bin/herdr'), '--session', SESSION, *args],
+    r = sp.run([tui_binary(), '--session', SESSION, *args],
                capture_output=True, text=True, timeout=10)
     if r.returncode: raise RuntimeError(r.stderr.strip() or r.stdout.strip())
     if not r.stdout.strip(): return {}
