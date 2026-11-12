@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { parseFiles, fileChoices, browseRows, ancestors } from '../../desktop/shared/files.js';
 import { requestOf, selectRequest } from '../../desktop/shared/routing-core.js';
 import { selectLocation as pickerLocation, selectWorkflowContext } from '../../desktop/shared/stream-picker-routing.js';
-import { addLane, removeLane, findNode, laneIds } from '../../desktop/shared/stream-tree.js';
+import { addLane, removeLane, findNode, laneIds, withoutLaneState } from '../../desktop/shared/stream-tree.js';
 
 // Real Git records: quoted/newline names, renames, deletes and untracked files.
 test('file browser reads the actual no-renames porcelain contract', () => {
@@ -117,4 +117,39 @@ test('removing the last stream leaves an empty reusable slot', () => {
   assert.deepEqual(laneIds(empty),[ids[0]]);
   assert.equal(findNode(empty,ids[0]+'-conversation').content.props.kind,'empty');
   assert.equal(findNode(one,ids[0]+'-conversation').content.terminal,'host-a/t99');
+});
+
+test('closing a stale stream tolerates null siblings, deleted terminal content and repeated close', () => {
+  const tree=layout(), ids=laneIds(tree);
+  const root=findNode(tree,'portrait-streams');
+  root.children.push(null);
+  findNode(tree,ids[0]+'-conversation').content=null;
+  findNode(tree,ids[1]+'-conversation').content={terminal:'host/t-kept'};
+  const removed=removeLane(tree,ids[0]);
+  assert.deepEqual(laneIds(removed),[ids[1]]);
+  assert.equal(findNode(removed,ids[1]+'-conversation').content.terminal,'host/t-kept');
+  assert.deepEqual(removeLane(removed,ids[0]),removed);
+  assert.deepEqual(laneIds(null),[]);
+  assert.throws(()=>removeLane(null,ids[0]),/Layout is unavailable/);
+});
+
+test('last stale stream resets even when optional panels have disappeared', () => {
+  const tree=layout(), ids=laneIds(tree), one=removeLane(tree,ids[1]);
+  const strip=n=>{if(n.children)n.children=n.children.filter(c=>c && c.id!==ids[0]+'-info' && c.id!==ids[0]+'-views').map(strip);return n;};
+  strip(one);
+  findNode(one,ids[0]+'-conversation').content=null;
+  const reset=removeLane(one,ids[0]);
+  assert.equal(findNode(reset,ids[0]+'-conversation').content.props.kind,'empty');
+});
+
+
+test('closing a view cleans only its state and resets embedded context in the last slot', () => {
+  const state={top:{terminal:'gone'},bottom:{terminal:'keep'}};
+  assert.deepEqual(withoutLaneState(state,'top'),{bottom:state.bottom});
+  assert.equal(state.top.terminal,'gone');
+  assert.deepEqual(withoutLaneState({'top:doc':true,'bottom:doc':true},'top',true),{'bottom:doc':true});
+  const tree=layout(),ids=laneIds(tree),one=removeLane(tree,ids[1]);
+  findNode(one,ids[0]+'-conversation').content={mod:'repo-portrait',props:{lane:ids[0],context:{cwd:'/deleted'}}};
+  const reset=removeLane(one,ids[0]);
+  assert.equal(findNode(reset,ids[0]+'-conversation').content.props.context,undefined);
 });

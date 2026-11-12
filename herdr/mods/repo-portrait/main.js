@@ -13,6 +13,7 @@ import Account from './account.js';
 import {
   addLane,
   removeLane,
+  withoutLaneState,
   laneIds,
   findNode
 } from './stream-tree.js';
@@ -543,6 +544,11 @@ export default class Portrait extends View {
         configs = shared(KEY) || {};
       let el = v_flex().p(12).gap(5).bg(t.surface).text_color(t.foreground)
         .child(div().px(8).py(4).font_semibold().child(p.operation === 'remove' ? 'Remove a stream view' : this.separateWindow ? 'Open which stream in a new window?' : this.splitAxis ? 'Which stream should split?' : 'Add a stream'));
+      if (this.error) el = el.child(div().text_size(12).text_color(t.muted).child(this.error));
+      if (this.confirmRemove) return el
+        .child(div().text_size(12).child('This view has unsaved editor text. Close it and discard that text? Files on disk and running agents will be preserved.'))
+        .child(control('confirm-remove-view', 'Discard editor text and close view', (_e, cx) => this.removeSlot(this.confirmRemove, cx, true), {icon:'minus'}))
+        .child(control('cancel-remove-view', 'Keep view', (_e, cx) => { this.confirmRemove=null; cx.notify(); }));
       if (p.operation === 'remove' || this.splitAxis || this.separateWindow) {
         el = el.children(ids.map(id => control('target-' + id, (configs[id]?.repo || 'Empty') + ' / ' + (configs[id]?.stream || id), (_e, cx) => p.operation === 'remove' ? this.removeSlot(id, cx) : this.separateWindow ? this.openWindow(id, cx) : this.addSlot(this.splitAxis, id, cx), {
           icon: p.operation === 'remove' ? 'minus' : this.separateWindow ? 'external' : 'columns'
@@ -840,23 +846,26 @@ export default class Portrait extends View {
     });
     cx.notify();
   }
-  removeSlot(id, cx) {
+  removeSlot(id, cx, discard=false) {
     try {
-      if (Object.entries(shared('repo.portrait.unsaved') || {}).some(([key, value]) => key.startsWith(id + ':') && value)) throw Error('Save or discard this stream’s editor changes before removing its view.');
+      if (!discard && Object.entries(shared('repo.portrait.unsaved') || {}).some(([key, value]) => key.startsWith(id + ':') && value)) {
+        this.confirmRemove=id;
+        cx.notify();
+        return;
+      }
       const tree = removeLane(layout(), id);
       run('layout.set', {
         layout: tree
       });
       for (const key of [KEY, VIEWS, INFO, 'repo.portrait.browser']) {
-        const next = {
-          ...(shared(key) || {})
-        };
-        delete next[id];
-        setShared(key, next);
+        setShared(key, withoutLaneState(shared(key), id));
       }
-      closeOverlay(props().overlay);
+      setShared('repo.portrait.unsaved', withoutLaneState(shared('repo.portrait.unsaved'), id, true));
+      // A pending open must not put a closed stream back in this view.
+      setShared('repo.open-requests', Object.fromEntries(Object.entries(shared('repo.open-requests') || {}).filter(([, request]) => request?.lane !== id)));
+      closeOverlay(props()?.overlay);
     } catch (e) {
-      this.error = String(e);
+      this.error = e?.message || (e ? String(e) : 'Could not close this view. Reopen the stream menu and try again.');
       cx.notify();
     }
   }
