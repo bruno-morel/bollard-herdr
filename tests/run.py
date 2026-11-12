@@ -10,7 +10,7 @@ import tempfile
 source = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="repo-tools-tests-") as directory:
     stage = Path(directory)
-    for name in ("install.py", "desktop_build.py", "standalone_build.py", "install_mods.py"):
+    for name in ("install.py", "install_dependencies.py", "desktop_build.py", "standalone_build.py", "install_mods.py"):
         shutil.copy2(source / name, stage / name)
     shutil.copy2(source / "herdr/helpers/window.py", stage / "window_helper.py")
     shutil.copytree(source / "bin", stage, dirs_exist_ok=True,

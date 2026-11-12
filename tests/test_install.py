@@ -16,6 +16,9 @@ spec.loader.exec_module(I)
 
 class Installer(unittest.TestCase):
     def setUp(self):
+        self.dependencies = patch.object(I, "check_dependencies", return_value=True)
+        self.dependencies.start()
+        self.addCleanup(self.dependencies.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
         self.source = self.root / "source"
@@ -59,6 +62,16 @@ class Installer(unittest.TestCase):
         (mod / "state.js").write_text("export const v = 1;\n")
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             self.run_install("--apply")
+        self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_missing_dependencies_block_apply_before_writes(self):
+        with patch.object(I, "check_dependencies", return_value=False):
+            with self.assertRaisesRegex(SystemExit, "prerequisites"):
+                self.run_install("--apply")
+        self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_dependency_check_never_installs(self):
+        self.run_install("--check-deps")
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_desktop_and_tui_have_separate_interface_targets(self):

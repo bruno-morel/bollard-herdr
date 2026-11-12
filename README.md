@@ -33,6 +33,7 @@ remote-host prerequisites.
 ```sh
 git clone https://github.com/bruno-morel/bollard-herdr.git
 cd bollard-herdr
+./install.sh all --check-deps # show every missing prerequisite, including hc
 ./install.sh all              # look first
 ./install.sh all --apply      # install desktop + terminal
 ```
@@ -45,6 +46,9 @@ cd bollard-herdr
 
 In Herdr desktop, choose **studio-work-portrait**, then **Choose a stream**.
 In a terminal, run `repo-tui`. No agent starts just because you installed a UI.
+Installation checks required dependencies before changing files and prints
+setup commands for anything missing. Sign in to agents and configure Docker
+on the machine where you intend to run them; see the setup guide.
 
 ## What you can do
 

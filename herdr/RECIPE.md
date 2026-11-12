@@ -69,7 +69,9 @@ This layout needs Bollard's controllers; copying the pictures won't do it.
 After the [prerequisites](../docs/setup.md#prerequisites), from this repo:
 
 ```sh
+./install.sh desktop --check-deps # install missing prerequisites first, including hc
 ./install.sh desktop --apply   # desktop machine
+./install.sh tui --check-deps   # run on the remote host too
 ./install.sh tui --apply       # remote development host, from its own clone
 ```
 

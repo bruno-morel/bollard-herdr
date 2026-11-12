@@ -12,6 +12,7 @@ from pathlib import Path
 import tempfile
 
 from desktop_build import check as check_desktop
+from install_dependencies import check as check_dependencies
 
 SOURCE = Path(__file__).resolve().parent
 
@@ -61,7 +62,15 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--verify", action="store_true")
+    mode.add_argument("--check-deps", action="store_true", help="Check prerequisites and show installation steps without changing files")
     args = parser.parse_args()
+    ready = check_dependencies(args.profile)
+    if args.check_deps:
+        if not ready:
+            raise SystemExit(1)
+        return
+    if args.apply and not ready:
+        raise SystemExit("Installation stopped before changing files: required prerequisites are missing.")
     try:
         check_desktop(SOURCE)
     except (OSError, ValueError) as exc:

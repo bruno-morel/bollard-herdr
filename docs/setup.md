@@ -2,6 +2,28 @@
 
 ## Prerequisites
 
+From the Bollard checkout, start with:
+
+```sh
+./install.sh all --check-deps     # desktop + terminal on this laptop
+./install.sh tui --check-deps     # terminal-only / SSH host
+```
+
+The checker lists **all** missing prerequisites together with installation
+commands, including `hc`. Run the suggested commands, then repeat the check.
+`--apply` also checks first and stops before writing files when a required
+dependency is missing. A normal preview includes the same checklist.
+These checks guide installation; they never download software, sign you in,
+start agents or start Docker. `--verify` checks installed Bollard files and
+also reports prerequisites; use `--check-deps` for a dependency-only pass/fail.
+
+Git, zsh, SSH and `hc` are required everywhere. Desktop checks `herdr-app`;
+terminal checks `herdr` and Glow. Docker/Compose and agent CLIs are reported
+as optional locally because they may live only on your remote development host.
+The checker tests executable discovery and Compose availability, not provider
+authentication or whether Docker is running. Python 3.9+ is checked before the
+installer can run; `install.sh` explains how to install it when missing.
+
 | Machine | Install |
 | --- | --- |
 | Everywhere | Git, Python 3.9+, zsh, SSH, [herdr-core (`hc`)](https://herdr.dev/core/) |
@@ -74,13 +96,22 @@ Clone this repository on **each** machine. From its checkout:
 
 ```sh
 # Laptop
+./install.sh all --check-deps
 ./install.sh all --apply
 
 # Server
+./install.sh tui --check-deps
 ./install.sh tui --apply
 ```
 
-Add the server in Herdr. Select **studio-work-portrait** for the desktop layout.
+After `hc --version` works on both machines, connect from the **laptop**:
+
+```sh
+hc machine add your-user@your-server
+hc machine ls
+```
+
+You can also add the server in Herdr desktop. Select **studio-work-portrait** for the desktop layout.
 Pick your own streams; the public layout ships without somebody else's terminal
 IDs. `laptop` and `jumpbox` remain aliases for `all` and `tui`.
 
