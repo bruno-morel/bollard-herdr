@@ -1,3 +1,4 @@
+import {publishedPorts} from './docker-ports.js';
 import {scopedAgents,agentTree,statusKind,memoryReading} from './agent-cards.js';
 import {showAccount} from './account-pane.js';
 import {View,div} from 'gpui-kit';
@@ -126,6 +127,11 @@ export default class Info extends View {
     .child(h_flex().gap(8).items_center()
      .child(div().flex_1().text_size(10).text_color(t.muted).child(ok?'Up '+duration(s.UptimeSeconds):'Stopped'))
      .child(div().text_size(10).text_color(s.Restarts?colors.amber:t.dim).tooltip('Container restart count').child('↻ '+(s.Restarts??'—'))))
+    .children(publishedPorts([s],c?.on).map(p=>h_flex().gap(5).items_center().flex_wrap()
+     .child(div().px(8).py(3).rounded(6).bg(t.selected).text_color(t.foreground).text_size(19).font_semibold().tooltip(p.note).child(':'+p.port))
+     .child(div().flex_1().text_size(10).text_color(t.muted).child('→ '+p.target+'/'+p.protocol))
+     .when(!!p.address,r=>r.child(button('address-'+p.key,'Copy address',(_e,cx)=>{cx.write_to_clipboard(p.address);notify({title:'Address copied',body:p.address});},{icon:'copy',compact:true}).tooltip(p.address+' · '+p.note)))
+     .when(!!p.url,r=>r.child(button('url-'+p.key,p.suggested?'Copy suggested URL':'Copy URL',(_e,cx)=>{cx.write_to_clipboard(p.url);notify({title:'URL copied',body:p.url});},{icon:'external',compact:true}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note)))))
     .when(!!ram,e=>e.child(v_flex().gap(4).tooltip('RAM used / '+ram.kind+'. Docker reports memory usage excluding reclaimable cache on Linux.')
      .child(h_flex().gap(6).items_center()
       .child(div().flex_1().text_size(10).text_color(t.muted).child('RAM '+ram.used+' / '+ram.limit))

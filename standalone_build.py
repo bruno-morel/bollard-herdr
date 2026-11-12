@@ -34,7 +34,7 @@ def plan(root=ROOT):
                 }
             )
         else:
-            for item in ("docker.js", "docker-state.js", "docker-ports.js", "log-view.js"):
+            for item in ("docker.js", "docker-state.js", "log-view.js"):
                 sources[item] = mods / "repo-portrait" / item
         for relative, source in sources.items():
             text = source.read_text().replace(
