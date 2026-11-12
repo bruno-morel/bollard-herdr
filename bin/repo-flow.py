@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared desktop/TUI workflow. Runtime records outside Git; review allowance owned by repo-review."""
 import argparse
+from repo_terminal_display import launch as launch_terminal
 import repo_agents as agents
 import repo_operations as O
 from repo_risk_policy import POLICY as RISK_POLICY
@@ -41,7 +42,10 @@ def fail(text):
 
 
 def command(argv, **kw):
-    return sp.run([str(x) for x in argv], check=True, **kw)
+    args = [str(x) for x in argv]
+    if args[:2] == ["hc", "run"]:
+        return launch_terminal(args, check=True, **kw)
+    return sp.run(args, check=True, **kw)
 
 
 def launch_command(argv, cwd):

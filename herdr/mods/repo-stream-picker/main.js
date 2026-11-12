@@ -1,3 +1,4 @@
+import {viewerExec} from './terminal-display.js';
 import {
   dropdown
 } from './dropdown.js';
@@ -351,7 +352,7 @@ export default class StreamPicker extends View {
         if (prepared.code) throw Error(prepared.stderr || prepared.stdout);
         const out = JSON.parse(prepared.stdout);
         this.progress('Starting agent / Docker setup…', cx);
-        const r = await exec(baseRole, ['flow', 'open', stream, '--role', baseRole, '--agent', this.agent, '--profile', this.role], {
+        const r = await viewerExec(baseRole, ['flow', 'open', stream, '--role', baseRole, '--agent', this.agent, '--profile', this.role], {
           cwd: out.cwd,
           on: this.on
         });

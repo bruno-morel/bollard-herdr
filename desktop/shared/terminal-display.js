@@ -1,0 +1,9 @@
+import {exec, theme} from 'herdr';
+// Capture the originating window, including its light/dark preference, before
+// asynchronous preparation or a separate window can change the active view.
+export function viewerExec(command, args=[], options={}) {
+ const t=theme(), colors={fg:t.foreground,bg:t.background};
+ if (!Object.values(colors).every(c=>/^#[0-9a-f]{6}$/i.test(c)))
+  throw Error('Cannot determine this window’s terminal colors. Reopen the window before starting an agent.');
+ return exec('env', ['BOLLARD_TERMINAL_DISPLAY='+JSON.stringify(colors), command, ...args], options);
+}

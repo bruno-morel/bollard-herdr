@@ -1,3 +1,4 @@
+import {viewerExec} from './terminal-display.js';
 import {
   operation
 } from './operations.js';
@@ -105,7 +106,7 @@ export function watchOpen(request) {
   });
 }
 export async function retryOpen(p) {
-  const r = await exec(p.role || 'work', ['flow', 'open', p.stream, '--retry-token', p.retryToken], {
+  const r = await viewerExec(p.role || 'work', ['flow', 'open', p.stream, '--retry-token', p.retryToken], {
     cwd: p.cwd,
     on: p.on
   });

@@ -57,5 +57,10 @@
     "repo-portrait/panel-host.js",
     "repo-portrait-reader/panel-host.js",
     "repo-portrait-changes/panel-host.js"
+  ],
+  "terminal-display.js": [
+    "repo-portrait/terminal-display.js",
+    "repo-stream-picker/terminal-display.js",
+    "repo-workflow/terminal-display.js"
   ]
 }

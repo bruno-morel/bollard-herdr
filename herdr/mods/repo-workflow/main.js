@@ -1,3 +1,4 @@
+import {viewerExec} from './terminal-display.js';
 import { View, div } from 'gpui-kit';
 import { v_flex, h_flex, Input, InputState } from 'gpui-base';
 import { spaces, panes, terminals, focused, props, theme, exec, run, notify, openOverlay, closeOverlay, shared, setShared, nextCommand } from 'herdr';
@@ -44,7 +45,7 @@ export default class Workflow extends View {
   this.busy=true;this.message='Preparing…';
   cx.spawn(async cx=>{try{
    if(this.action==='open'&&await openExisting(cwd,stream,role,this.on,props().lane,props().newWindow)){closeOverlay(props().overlay);return;}
-   const r=await exec(role,args,{cwd,on:this.on});
+   const r=await viewerExec(role,args,{cwd,on:this.on});
    if(r.code)throw new Error(r.stderr.trim()||r.stdout.trim()||'The workflow could not start.');
    if(['open','prepare','implement'].includes(this.action)){const result=JSON.parse(r.stdout.trim().split('\n').pop());watchOpen({terminal:result.terminal,stream,cwd,on:this.on,lane:props().lane,newWindow:!!props().newWindow});}
    notify({title:'Workflow requested',body:this.action==='helper'?'The helper appears beside its lead.':props().newWindow?'Preparing your stream. Its window will open when the conversation is ready.':'Follow the Workflow tab for setup and any questions.',level:'success'});

@@ -227,3 +227,18 @@ Agents keep running; reopen the TUI to load changed Python code.
 
 `./install.sh all` previews changes. `./install.sh all --verify` checks installed
 code. Personalized layouts are seeded once, not compared byte-for-byte afterward.
+
+### Input colors in background agent conversations
+
+Desktop stream creation, reopening, and workflow retries pass the originating
+window’s foreground/background colors to Herdr before the program starts.
+This prevents an agent from detecting Herdr’s headless default palette before
+its light-theme window attaches. The palette travels with the setup worker and
+agent launcher; existing conversations are never restarted to change colors.
+Terminal-only launches retain `hc`’s normal terminal detection.
+
+An already-running agent may retain the colors it detected at startup. Finish
+its current task and resume that saved conversation from the desktop picker to
+apply the startup fix. Do not create a new conversation just to change colors.
+Switching a viewer between light and dark after launch still depends on the
+agent’s support for live color changes.

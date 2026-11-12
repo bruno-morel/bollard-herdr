@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Studio/Work terminals in herdr-core; all runtime data stays outside Git."""
 import argparse
+from repo_terminal_display import launch as launch_terminal
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -260,7 +261,7 @@ def open_stream(args):
             command = ['hc', 'run', '--bg', '--keep', '--no-parent', '--name', terminal_name, '--cwd', str(target)]
             for k, v in labels.items():
                 command += ['--label', k+'='+v]
-            result = sp.run(command+['--']+pane, cwd=target)
+            result = launch_terminal(command+['--']+pane, cwd=target)
             if result.returncode:
                 fail('Herdr launch did not confirm success; inspect hc ls --all before retrying. Stream preserved.')
             row = hc_json('get', terminal_name)
