@@ -8,6 +8,11 @@ export function checkRows(s){return (s?.checks||[]).map(check=>{
  const state=result?result.exit_code===0?'passed':result.exit_code===-1?'interrupted':'failed':s.current===check.id?'running':['failed','passed','incomplete','stale'].includes(s.state)?'not run':'pending';
  return {...check,result,state:s.state==='stale'?'stale':state,previousState:state};
 });}
+export function countLabel(n){
+ if(!n)return 'Count unavailable';
+ if(n.failed>0)return n.failed+' failed';
+ return n.passed+' passed'+(n.skipped?' · '+n.skipped+' skipped':'')+(n.flaky?' · '+n.flaky+' flaky':'');
+}
 export function resultsView(s,chosen,choose){
  const t=theme(),p=palette(),rows=checkRows(s),ink={passed:p.green,failed:p.red,interrupted:p.amber,running:p.blue,pending:t.dim,'not run':t.dim,stale:p.amber};
  const counts=rows.reduce((a,r)=>(a[r.state]=(a[r.state]||0)+1,a),{});
@@ -20,8 +25,8 @@ export function resultsView(s,chosen,choose){
   return h_flex().id('result-'+r.id).flex_none().w_full().px(9).py(5).gap(8).items_center().rounded(6).bg(selected?ink[r.state]+'18':t.background).border_1().border_color(selected?ink[r.state]:t.border)
    .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).tooltip(r.id+' · '+r.argv.join(' ')).child(r.id))
    .child(badge(r.state==='stale'?'stale · '+r.previousState:r.state,ink[r.state]).text_size(10).flex_none())
-   .child(div().w(76).text_size(11).text_color(n?.failed&&r.state!=='stale'?p.red:t.muted).tooltip(n?`${n.passed} passed · ${n.failed} failed · ${n.skipped} skipped${n.flaky?' · '+n.flaky+' flaky':''}`:'Test-case count was not reported; status comes from the command exit code.').child(n?String(n.failed)+' failed':'— failed'))
+   .child(div().min_w(76).text_size(11).text_color(n?.failed&&r.state!=='stale'?p.red:t.muted).tooltip(n?`${n.passed} passed · ${n.failed} failed · ${n.skipped} skipped${n.flaky?' · '+n.flaky+' flaky':''}`:'Test-case count was not reported; status comes from the command exit code.').child(countLabel(n)))
    .child(button('logs-'+r.id,selected?'Hide logs':'Logs',(_e,cx)=>choose(r.id,cx),{icon:'list',selected}));
  })))
- .child(div().text_size(10).text_color(t.muted).flex_none().child('One row per project check. Failure counts come from native test reports; — means not reported.'));
+ .child(div().text_size(10).text_color(t.muted).flex_none().child('One row per project check. Counts come from native test reports; unavailable counts do not mean failure.'));
 }

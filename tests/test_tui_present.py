@@ -100,5 +100,14 @@ class Presentation(unittest.TestCase):
                 }
             )
             self.assertTrue(line.startswith(mark))
-            self.assertIn("failed: 1", line)
+            self.assertIn("1 failed", line)
             self.assertEqual(actual, color)
+
+    def test_success_and_unknown_counts_have_no_failure_label(self):
+        line, color = test_line({'id':'unit','exit_code':0,'native_summary':{'passed':244,'failed':0}})
+        self.assertIn('244 passed', line)
+        self.assertNotIn('failed', line)
+        self.assertEqual(color,2)
+        line, color = test_line({'id':'typecheck','exit_code':0})
+        self.assertIn('Count unavailable',line)
+        self.assertNotIn('failed',line)

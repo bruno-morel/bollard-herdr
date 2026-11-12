@@ -45,14 +45,15 @@ def test_line(row):
     code = row.get("exit_code")
     summary = row.get("native_summary") or {}
     mark = "✓" if code == 0 else "…" if code is None else "✗"
-    summary = (
-        " · ".join(
-            f"{k}: {v}" for k, v in summary.items() if isinstance(v, (int, float, str))
-        )
-        if isinstance(summary, dict)
-        else str(summary)
-    )
-    return f"{mark} {row['id']}  {summary or ('Exit '+str(code))}", (
+    if summary:
+        counts = ([str(summary['failed'])+' failed'] if summary.get('failed') else [])
+        counts += [str(summary.get('passed',0))+' passed']
+        if summary.get('skipped'):counts.append(str(summary['skipped'])+' skipped')
+        if summary.get('flaky'):counts.append(str(summary['flaky'])+' flaky')
+        detail=' · '.join(counts)
+    else:
+        detail='Count unavailable · Exit '+str(code)
+    return f"{mark} {row['id']}  {detail}", (
         2 if code == 0 else 3 if code is None else 4
     )
 
