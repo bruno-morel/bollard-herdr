@@ -117,7 +117,7 @@ export default class Info extends View {
  if(tab==='services'){
   const services=this.services?.services||[],running=services.filter(s=>s.State==='running').length;
   if(services.length)content=content.child(h_flex().gap(8).items_center().child(badge(running+'/'+services.length+' RUNNING',running===services.length?colors.green:colors.amber)));
-  for(const s of services){const m=s.Metrics,ram=memoryReading(s),mem=ram?.pct,ok=s.State==='running',healthy=s.Health==='healthy',warn=s.Health==='unhealthy',ink=warn?colors.red:ok?colors.green:colors.amber;
+  for(const s of services){const ram=memoryReading(s),mem=ram?.pct,ok=s.State==='running',healthy=s.Health==='healthy',warn=s.Health==='unhealthy',ink=warn?colors.red:ok?colors.green:colors.amber;
    const tag=(text,color)=>badge(text,color).px(4).py(1).text_size(9).flex_none();
    content=content.child(v_flex().gap(5).p(8).rounded(8).bg(t.background).border_1().border_color(t.border)
     .child(h_flex().gap(4).items_center().justify_end().flex_wrap()
@@ -129,15 +129,14 @@ export default class Info extends View {
      .child(div().px(6).py(2).rounded(5).bg(t.selected).text_color(t.foreground).text_size(12).font_semibold().tooltip(p.target+'/'+p.protocol+' · '+p.note).child(':'+p.port))
      .when(!!p.address,r=>r.child(button('address-'+p.key,'Copy address',(_e,cx)=>{cx.write_to_clipboard(p.address);notify({title:'Address copied',body:p.address});},{icon:'copy',compact:true}).tooltip(p.address+' · '+p.note)))
      .when(!!p.url,r=>r.child(button('url-'+p.key,p.suggested?'Copy suggested URL':'Copy URL',(_e,cx)=>{cx.write_to_clipboard(p.url);notify({title:'URL copied',body:p.url});},{icon:'external',compact:true}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note))))))
-    .child(h_flex().gap(8).items_center()
+    .child(h_flex().gap(6).items_center().flex_wrap()
      .child(div().flex_1().text_size(10).text_color(t.muted).child(ok?'Up '+duration(s.UptimeSeconds):'Stopped'))
-     .child(div().text_size(10).text_color(s.Restarts?colors.amber:t.dim).tooltip('Container restart count').child('↻ '+(s.Restarts??'—'))))
-    .when(!!ram,e=>e.child(v_flex().gap(4).tooltip('RAM used / '+ram.kind+'. Docker reports memory usage excluding reclaimable cache on Linux.')
-     .child(h_flex().gap(6).items_center()
-      .child(div().flex_1().text_size(10).text_color(t.muted).child('RAM '+ram.used+' / '+ram.limit))
-      .child(div().text_size(10).text_color(level(mem??0)).child(mem===null?'—':Math.round(mem)+'%')))
-     .child(meter('memory-'+s.ID,mem,'RAM against '+ram.kind,null,5))))
-    .when(!m&&ok,e=>e.child(caption('Memory reading unavailable.'))));
+     .when(!!ram,e=>e.child(h_flex().gap(5).items_center().flex_none()
+      .tooltip('RAM used / '+ram.kind+' · '+(mem===null?'Percentage unavailable':Math.round(mem)+'%')+'. Docker excludes reclaimable cache on Linux.')
+      .child(div().text_size(10).text_color(t.muted).child('RAM '+ram.used+' / '+ram.limit))
+      .child(div().w(44).flex_none().child(meter('memory-'+s.ID,mem,'RAM against '+ram.kind,null,4)))))
+     .when(!ram&&ok,e=>e.child(div().text_size(10).text_color(t.dim).tooltip('Memory reading unavailable').child('RAM —')))
+     .child(div().text_size(10).text_color(s.Restarts?colors.amber:t.dim).tooltip('Container restart count').child('↻ '+(s.Restarts??'—')))));
   }
   if(!services.length)content=content.child(caption(this.services?.state==='unprepared'?'This stream hasn’t prepared a Docker stack yet.':this.services?'No containers in this Compose project.':'Loading containers…'));
   for(const warning of this.services?.warnings||[])content=content.child(caption(warning));
