@@ -1,4 +1,4 @@
-import {reportPanel,agentState} from './signals.js';
+import {reportPanel} from './signals.js';
 import {resultsView} from './test-results.js';
 import {View,div,svg} from 'gpui-kit';
 import {v_flex,h_flex,Editor,EditorState} from 'gpui-base';
@@ -7,12 +7,13 @@ import {scopedLocation,leadFor,VIEWS} from './scope.js';
 import {toolColors,button,caption,view} from './ui.js';
 
 // Setup, running and rerunning are different states, not one misleading button.
-export function primaryAction(s,busy=false,pending=false,ready=true){
+export function primaryAction(s,busy=false,pending=false){
  if(busy)return {label:'Working…',disabled:true};
  if(!s)return {label:'Loading tests…',disabled:true};
  if(s.state==='preparing')return {label:'Preparing first run…',disabled:true};
  if(['queued','running'].includes(s.state))return {label:'Tests running…',disabled:true};
- if(s.failure_prompt)return {label:ready?'Find why and fix':'Find why and fix · agent unavailable',action:'fix',icon:'test',disabled:!ready};
+ if(['launching','investigating','waiting'].includes(s.repair?.state))return {label:s.repair.state==='waiting'?'Repair queued · waiting for agent':'Investigating failures…',disabled:true};
+ if(s.failure_prompt)return {label:'Find why and fix',action:'fix',icon:'test'};
  if(!s.configured)return {label:'First tests run',action:'first',icon:'play'};
  return {label:s.results?.length?'Rerun tests':'First tests run',action:'run',icon:'play'};
 }
@@ -63,8 +64,9 @@ export default class Tests extends View {
    if(current()){
     if(action==='first')this.pendingSetup=true;
     if(['run','first'].includes(action)){this.data=JSON.parse(r.stdout);this.showLog();}
+    if(action==='fix')this.data={...this.data,repair:JSON.parse(r.stdout)};
    }
-   notify({title:c.stream+' · Tests',body:action==='run'?'Configured checks queued. No Claude usage.':action==='first'?'A read-only child is selecting project checks; the first test run follows automatically.':'Failures sent to this conversation.',level:'success'});
+   notify({title:c.stream+' · Tests',body:action==='run'?'Configured checks queued. No Claude usage.':action==='first'?'A read-only child is selecting project checks; the first test run follows automatically.':JSON.parse(r.stdout).message||'Repair requested.',level:'success'});
   }catch(e){
    notify({title:'Tests need attention',body:String(e),level:'warning'});
    if(current())this.actionError=String(e);
@@ -73,7 +75,7 @@ export default class Tests extends View {
  render(cx){
   const c=scopedLocation(),t=theme();
   if(this.key!==c?.key){this.key=c?.key;this.generation++;this.busy=false;this.data=null;this.error='';this.actionError='';this.pendingSetup=false;this.chosen=null;this.showCommands=false;this.logOpen=false;this.editor.set_value('');this.refresh(cx,true);}
-  const s=this.data,lead=leadFor(terminals(),c),ready=!!lead&&['idle','done'].includes(agentState(lead)),action=primaryAction(s,this.busy,this.pendingSetup,ready),missing=!!s&&!s.configured&&!s.failure_prompt;
+  const s=this.data,action=primaryAction(s,this.busy,this.pendingSetup),missing=!!s&&!s.configured&&!s.failure_prompt;
   reportPanel('tests',c,this.error||this.actionError||['failed','incomplete'].includes(s?.state));
   return v_flex().size_full().min_h(0).p(4).bg(toolColors().background).text_color(t.foreground).gap(6)
    .child(h_flex().px(12).py(6).gap(8).items_center().flex_wrap().justify_end().flex_none()
@@ -82,6 +84,8 @@ export default class Tests extends View {
     .when(!!s?.configured,e=>e.child(button('tests-commands',this.showCommands?'Hide commands':'Show commands',(_e,cx)=>{this.showCommands=!this.showCommands;cx.notify();},{icon:'list',selected:this.showCommands})))
     .when(!!s?.setup_terminal,e=>e.child(button('tests-child','Open test helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.setup_terminal}),{icon:'agents'})))
     .child(button('tests-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
+   .when(!!s?.repair?.message,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.repair.message)))
+   .when(!!s?.repair?.terminal,e=>e.child(button('tests-repair-helper','Open repair helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.repair.terminal}),{icon:'agents'})))
    .when(!!this.error||!!this.actionError,e=>e.child(div().px(12).text_size(12).text_color(t.blocked).child(this.actionError||this.error)))
    .when(missing,e=>e.child(v_flex().flex_1().min_h(0).id('tests-setup-scroll').overflow_y_scrollbar().p(20).gap(10)
     .child(svg('mods/repo-portrait/icons/test.svg').size(34).text_color(t.accent))
@@ -95,7 +99,7 @@ export default class Tests extends View {
    .when(!missing,e=>e
     .child(div().px(12).child(caption(s?.message||'Runs the saved checks. No model usage for reruns.')))
     .when(s?.state==='stale',e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Historical results — not the current checkout. Tests run directly by an agent are not automatically imported here.')))
-    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Find why and fix asks your current agent to verify the failure, make a focused fix and check it. Available when the agent is idle; no interruption, new agent or independent review. Stale results are verified first.')))
+    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Find why and fix uses the idle lead, or starts a read-only Codex/Cursor diagnosis while it is busy and queues repair for when it is idle. No competing edits or independent review. Stale failures are verified first.')))
     .when(!!s?.checks,e=>e.child(div().px(12).text_size(11).text_color(t.muted).child(s.checks.length+' configured checks · Up to '+Math.ceil(s.checks.reduce((n,x)=>n+(x.timeout||120),0)/60)+' minutes'+(s.current?' · Running '+s.current:''))))
     .when(!!s?.setup_summary,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.setup_summary+' · '+s.setup_limitations)))
     .when(this.showCommands,e=>e.child(v_flex().id('tests-commands-list').max_h(140).flex_none().overflow_y_scrollbar().px(12).py(5).gap(5)

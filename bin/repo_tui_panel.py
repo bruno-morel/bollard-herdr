@@ -829,12 +829,10 @@ class Panel:
             self.message = "Tests are already running."
             return
         if d.get("failure_prompt"):
-            if status(self.cache.get("lead", self.row)) not in ("idle", "done"):
-                self.message = "Find why and fix is available when the agent is idle. Nothing sent."
-                return
             out = self.busy("Requesting focused fix…", lambda: self.b.work(
                 self.row, "tests", "fix", W.label(self.row, "stream"),
                 "--target", self.address.rsplit("/", 1)[-1], "--json"))
+            self.cache["tests"]["repair"] = out
             self.message = out.get("message", "Fix requested; follow the conversation.")
             self.last["tests"] = 0
             return
@@ -1411,6 +1409,10 @@ class Panel:
                     "R Find why and fix" if d.get("failure_prompt") else
                     "R Rerun tests" if d.get("configured") else "R First tests run",
                     "tests-run", color=4 if d.get("failure_prompt") else 1)
+                if d.get("repair", {}).get("message"):
+                    y += 1
+                    height -= 1
+                    self.ui.put(y, 1, d["repair"]["message"], self.ui.color(3))
                 self.index = max(0, min(self.index, len(self.rows) - 1))
                 start = max(0, self.index - height + 3)
                 for i, row in enumerate(self.rows[start : start + height - 2], start):

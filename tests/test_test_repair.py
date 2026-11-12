@@ -32,3 +32,82 @@ class RepairDelivery(unittest.TestCase):
                 self.assertEqual(len([c for c in calls if c[0]=='send']),1)
                 evidence['state']='running'
                 with self.assertRaisesRegex(RuntimeError,'test run'):T.send(ctx,'t1',repair=True)
+
+class AutomaticRepair(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name)
+        self.ctx=(self.root,'demo',self.root/'runtime',self.root/'review',self.root/'packet','key')
+        self.row={'state':'live','status':{'state':'working','app':'codex'},'labels':{
+            'repo-tools.repo':'key','repo-tools.stream':'demo','repo-tools.role':'work',
+            'repo-tools.checkout':str(self.root),'repo-tools.agent':'claude'}}
+        self.evidence=dict(stream='demo',root=str(self.root),state='stale',token='run',head='abc',failure_prompt='failure',results=[dict(id='browser',exit_code=1,argv=['test'],log='log')])
+        self.calls=[]
+        def hc(*args):
+            self.calls.append(args)
+            return self.row if args[0]=='get' else {'address':'t2'}
+        for name,value in [('hc',hc),('snapshot',lambda ctx:self.evidence),('agent_running',lambda row:True),('context',lambda stream:self.ctx)]:
+            patcher=patch.object(T,name,value);patcher.start();self.addCleanup(patcher.stop)
+        patcher=patch.object(T.agents,'executable',return_value='/fake/codex');patcher.start();self.addCleanup(patcher.stop)
+
+    def test_busy_click_launches_one_codex_child_and_reuses_pending_job(self):
+        j=T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        again=T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        self.assertEqual(j['agent'],'codex') # Never chooses Claude automatically.
+        self.assertEqual(j['token'],again['token'])
+        self.assertEqual(len([c for c in self.calls if c[0]=='run']),1)
+        self.assertFalse(any(c[0]=='send' for c in self.calls))
+
+    def test_wrong_parent_never_launches(self):
+        self.row['labels']['repo-tools.stream']='other'
+        with self.assertRaisesRegex(RuntimeError,'lead conversation'):
+            T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        self.assertFalse(any(c[0]=='run' for c in self.calls))
+
+    def worker(self, changed=False, failed=False, wait=False):
+        j=T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        def process(*args,**kwargs):
+            if failed:return 1
+            if not wait:self.row['status']['state']='idle'
+            if changed:self.evidence['token']='new-run'
+            return 0
+        def wake(_):
+            self.assertEqual(T.R.read(self.ctx[2]/'repair.json')['state'],'waiting')
+            self.row['status']['state']='idle'
+        with patch.object(T.repair_jobs.time,'sleep',side_effect=wake),patch.object(T,'setup_argv',return_value=['fake']),patch.object(T.R,'process',side_effect=process),patch.object(T.agents,'structured_result',return_value={'diagnosis':'bad flag','limitations':'files changing','next_steps':'verify help'}),patch.object(T,'active_guard'),patch.object(T,'send',return_value={'message':'sent'}) as send:
+            T.repair_jobs.worker(T.repair_api(),'demo',j['token'])
+            job=T.R.read(self.ctx[2]/'repair.json')
+            return job,send.call_args_list
+
+    def test_helper_hands_diagnosis_to_original_lead_only_when_idle(self):
+        job,calls=self.worker()
+        self.assertEqual(job['state'],'sent')
+        self.assertEqual(calls[0].args[1],'t1')
+        self.assertTrue(calls[0].kwargs['repair'])
+        self.assertIn('bad flag',calls[0].kwargs['diagnosis'])
+
+    def test_new_test_evidence_retires_queued_request(self):
+        job,calls=self.worker(changed=True)
+        self.assertEqual(job['state'],'superseded');self.assertFalse(calls)
+
+    def test_failed_helper_never_sends_repair(self):
+        job,calls=self.worker(failed=True)
+        self.assertEqual(job['state'],'failed');self.assertFalse(calls)
+
+    def test_busy_lead_is_waited_for_without_sending_input(self):
+        job,calls=self.worker(wait=True)
+        self.assertEqual(job['state'],'sent')
+        self.assertEqual(len(calls),1)
+        self.assertFalse(any(c[0]=='send' for c in self.calls))
+
+    def test_lost_launch_acknowledgement_never_replays(self):
+        calls=[]
+        def hc(*args):
+            calls.append(args)
+            if args[0]=='get':return self.row
+            raise RuntimeError('lost reply')
+        with patch.object(T,'hc',hc):
+            with self.assertRaisesRegex(RuntimeError,'acknowledgement'):
+                T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+            T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        self.assertEqual(len([c for c in calls if c[0]=='run']),1)

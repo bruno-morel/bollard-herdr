@@ -189,7 +189,7 @@ Opening either panel alone does not start a model review.
 | Show / Hide commands | Inspect exactly what is configured to run. |
 | Logs / Hide logs on a result row | Read output for that check. |
 | Copy output | Copy the opened check's output. |
-| Find why and fix | Replaces Rerun tests when failures are captured. Ask the current idle agent to verify the failure, fix its cause and run focused checks. Busy agents are never interrupted. |
+| Find why and fix | Replaces Rerun tests when failures are captured. Use the idle lead immediately, or automatically start read-only diagnosis and queue repair until the busy lead is idle. |
 | Refresh icon | Read current run state without starting another run. |
 
 Result rows represent configured checks/commands. Detailed test counts depend on
@@ -355,8 +355,15 @@ are not automatically imported into the Tests pane. The standalone runner only
 runs saved checks; it never fixes application code automatically. **Find why and
 fix** is the explicit repair action (also a tappable button / **R** in the TUI).
 It verifies stale failures first, handles broken runner commands as well as product
-bugs, and preserves existing changes. It does not start another agent or a Claude
-review, reset allowances, merge or push. If delivery is uncertain, inspect the
+bugs, and preserves existing changes. When the lead is busy, one bounded read-only
+Codex/Cursor helper investigates (up to five minutes); the controller waits up to
+24 hours for that same lead to become idle, then sends the diagnosis and repair
+request automatically. It never writes into the busy checkout or interrupts the
+lead. If newer test evidence replaces the failures, the queued request is retired.
+Progress appears in Tests on desktop and TUI. Repeated clicks reuse the request;
+uncertain delivery is never retried automatically. Missing/closed agents and
+helper failures are reported explicitly. This does not start a Claude review,
+reset allowances, merge or push. A sent request is not a verified test pass. If delivery is uncertain, inspect the
 conversation before retrying. **Implement → Review** remains the separate bounded
 implementation and independent-review flow.
 

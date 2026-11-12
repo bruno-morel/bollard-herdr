@@ -82,7 +82,7 @@ Tests (no Claude usage):
 
   work tests status [stream] --json
   work tests run [stream]       Rerun the configured finite checks
-  work tests fix [stream] --target tID    Ask the idle lead to verify and fix failures
+  work tests fix [stream] --target tID    Diagnose failures and repair when the lead is available
   work tests first [stream] --target tID  Let a child select project checks, then run them
 
 Review:

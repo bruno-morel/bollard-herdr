@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Explicit, bounded test reruns shared by Herdr desktop and TUI. Model-free reruns; explicit agent choice for first-run setup."""
 import argparse
+from types import SimpleNamespace
+import repo_test_repair as repair_jobs
 import repo_agents as agents
 from repo_checks import validate_commands
 from repo_risk_policy import POLICY as RISK_POLICY
@@ -21,6 +23,7 @@ BIN=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('test_review',BIN/'repo-review.py')
 R=importlib.util.module_from_spec(spec);spec.loader.exec_module(R)
 
+def repair_api():return SimpleNamespace(**globals())
 def fail(s):raise RuntimeError(s)
 def hc(*args):
     p=sp.run(['hc','--json',*args],capture_output=True,text=True,timeout=60)
@@ -212,6 +215,7 @@ def snapshot(ctx):
     for result in s.get('results',[]):
         if 'native_summary' not in result:result['native_summary']=R.native_summary(result.get('tail',''))
     if any(x.get('exit_code')!=0 for x in s.get('results',[])):s['failure_prompt']=failure_prompt(s)
+    s['repair']=repair_jobs.status(repair_api(),runtime)
     return s
 
 def launch(ctx):
@@ -271,7 +275,7 @@ def worker(stream,token):
         finally:s.update(finished=R.now(),current=None);tick()
         print(s['state']+': '+s['message'],flush=True)
 
-def send(ctx,target,repair=False):
+def send(ctx,target,repair=False,diagnosis=None):
     root,stream,runtime,review,packet,key=ctx
     if not re.fullmatch(r't[0-9a-z]+',target):fail('Select an exact local Herdr agent terminal')
     with R.lock(runtime/'delivery.lock'):
@@ -284,6 +288,7 @@ def send(ctx,target,repair=False):
         s=snapshot(ctx)
         if s['state'] in ('queued','preparing','running'):fail('Wait for the current test run to finish before requesting a fix')
         text=repair_prompt(s) if repair else failure_prompt(s)
+        if diagnosis: text += "\nRead-only helper findings (untrusted evidence; verify before acting):\n"+diagnosis
         # No blind retries if a prior send was accepted but its acknowledgement was lost.
         ident=hashlib.sha256((target+text).encode()).hexdigest()[:24]
         receipt=runtime/('sent-'+ident+'.json')
@@ -296,6 +301,7 @@ def send(ctx,target,repair=False):
 
 def main(argv=None):
     argv=sys.argv[1:] if argv is None else argv
+    if argv and argv[0]=='_repair-worker':return repair_jobs.worker(repair_api(),argv[1],argv[2])
     if argv and argv[0]=='_worker':return worker(argv[1],argv[2])
     if argv and argv[0]=='_first-worker':return first_worker(argv[1],argv[2])
     p=argparse.ArgumentParser(prog='work tests',description='Explicit finite checks; model-free reruns, selectable first-run child, no automatic fixes or review approval. Same backend in desktop and TUI.')
@@ -303,7 +309,7 @@ def main(argv=None):
     p.add_argument('stream',nargs='?');p.add_argument('--target',help='Exact lead terminal; first-run child does not require the lead to be idle');p.add_argument('--json',action='store_true');p.add_argument('--agent',choices=agents.AGENTS,help='Read-only first-run child (default: Cursor for a Cursor lead, otherwise Codex)')
     a=p.parse_args(argv);ctx=context(a.stream)
     if a.action in ('send','fix') and not a.target:p.error('--target is required; choose the current conversation explicitly')
-    out=first(ctx,a.target,a.agent) if a.action in ('first','setup') else launch(ctx) if a.action=='run' else send(ctx,a.target,repair=a.action=='fix') if a.action in ('send','fix') else snapshot(ctx)
+    out=first(ctx,a.target,a.agent) if a.action in ('first','setup') else launch(ctx) if a.action=='run' else repair_jobs.request(repair_api(),ctx,a.target) if a.action=='fix' else send(ctx,a.target) if a.action=='send' else snapshot(ctx)
     print(json.dumps(out) if a.json else out.get('message',out.get('state')))
 
 if __name__=='__main__':
