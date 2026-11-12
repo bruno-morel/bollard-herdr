@@ -329,7 +329,8 @@ For installation, SSH and platform limits, see [Setup](setup.md).
 
 Use the minus button at the top of the layout, then choose the stream view.
 Closing a view does not require its worktree or terminal to still exist. The
-last view becomes an empty reusable slot. Unsaved editor text prompts you to
+last view offers to quit this Herdr instance or keep an empty reusable slot.
+Closing the window leaves its agents and other Herdr windows running. Unsaved editor text prompts you to
 save it or explicitly discard it before closing.
 
 This clears the view's selection and pending display requests. Running agents,
@@ -337,4 +338,5 @@ Docker resources, Git branches and files are preserved; deleting a worktree or
 stopping an agent is a separate action. To change from planning to coding on
 an existing stream, use **Hand off to… → Work** rather than deleting it.
 New conversations show prominent **Studio · Plan** and **Work · Implement**
-choices; custom roles remain available in the role/profile picker.
+choices; configured custom roles appear in the same switch, without a second
+role dropdown.

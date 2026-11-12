@@ -49,7 +49,7 @@ import {
 export default class StreamPicker extends View {
   init(_p, cx) {
     this.dropdowns = {};
-    for (const id of ['conversation', 'machine', 'repository', 'source', 'worktree', 'branch', 'agent', 'role-profile', 'handoff-role']) this.dropdowns[id] = {
+    for (const id of ['conversation', 'machine', 'repository', 'source', 'worktree', 'branch', 'agent', 'handoff-role']) this.dropdowns[id] = {
       open: false,
       at: 0,
       focus: cx.focus_handle(),
@@ -453,20 +453,16 @@ export default class StreamPicker extends View {
     } else {
       const roleOptions = data?.roles || {studio:{label:'Studio',base:'studio'},work:{label:'Work',base:'work'}};
       if (!roleOptions[this.role]) this.role = 'studio';
-      const baseRole = roleOptions[this.role]?.base || this.role;
       let setup = v_flex().gap(12)
-        .child(h_flex().gap(10).children(['studio','work'].filter(id=>roleOptions[id]).map(id =>
-          div().id('role-card-'+id).flex_1().p(12).rounded(8).border_1()
+        .child(h_flex().gap(10).flex_wrap().children(Object.entries(roleOptions).map(([id, role]) =>
+          div().id('role-card-'+id).flex_1().min_w(180).p(12).rounded(8).border_1()
             .border_color(this.role===id ? theme().solid : theme().border)
             .bg(this.role===id ? theme().selected : theme().surface).cursor_pointer()
+            .accessibility_label(role.label || id)
             .on_click((_e,cx)=>{this.role=id;cx.notify();})
             .child(v_flex().gap(5)
-              .child(div().text_size(15).font_semibold().child(id==='studio'?'Studio · Plan':'Work · Implement'))
-              .child(caption(id==='studio'?'Research, docs and handoffs':'Code, Docker, tests and review'))))))
-        .child(caption('Selected: '+roleOptions[this.role].label+' · '+(baseRole==='work'?'Implementation workflow':'Planning workflow')))
-        .child(select('role-profile', 'Role / custom profile', this.role,
-        Object.entries(roleOptions).map(([id, r])=>option(id,r.label,(r.description||'')+' · '+(r.base||id))),
-        (id,cx)=>{this.role=id;cx.notify();}));
+              .child(div().text_size(15).font_semibold().child(id==='studio'?'Studio · Plan':id==='work'?'Work · Implement':role.label || id))
+              .child(caption(role.description || (role.base==='work' || id==='work'?'Code, Docker, tests and review':'Research, docs and handoffs')))))));
       setup = setup.child(select('machine', 'Machine', this.on, machines().map(m => option(m.name, m.name || 'This computer')), (on, cx) => {
         if (this.on !== on) {
           const row = all.find(r => machineOf(r.address) === on);

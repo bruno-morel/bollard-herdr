@@ -545,6 +545,11 @@ export default class Portrait extends View {
       let el = v_flex().p(12).gap(5).bg(t.surface).text_color(t.foreground)
         .child(div().px(8).py(4).font_semibold().child(p.operation === 'remove' ? 'Remove a stream view' : this.separateWindow ? 'Open which stream in a new window?' : this.splitAxis ? 'Which stream should split?' : 'Add a stream'));
       if (this.error) el = el.child(div().text_size(12).text_color(t.muted).child(this.error));
+      if (this.confirmLast) return el
+        .child(div().text_size(12).child('This is the last stream view. Close this Herdr instance too? Agents and Docker keep running; other windows stay open.'))
+        .child(control('close-last-window', 'Close this Herdr instance', (_e, cx) => this.removeSlot(this.confirmLast.id, cx, this.confirmLast.discard, 'close'), {icon:'external'}))
+        .child(control('keep-empty-window', 'Keep an empty window', (_e, cx) => this.removeSlot(this.confirmLast.id, cx, this.confirmLast.discard, 'keep'), {icon:'minus'}))
+        .child(control('cancel-last-window', 'Cancel', (_e, cx) => { this.confirmLast=null; this.confirmRemove=null; cx.notify(); }));
       if (this.confirmRemove) return el
         .child(div().text_size(12).child('This view has unsaved editor text. Close it and discard that text? Files on disk and running agents will be preserved.'))
         .child(control('confirm-remove-view', 'Discard editor text and close view', (_e, cx) => this.removeSlot(this.confirmRemove, cx, true), {icon:'minus'}))
@@ -846,14 +851,22 @@ export default class Portrait extends View {
     });
     cx.notify();
   }
-  removeSlot(id, cx, discard=false) {
+  removeSlot(id, cx, discard=false, lastChoice=null) {
     try {
       if (!discard && Object.entries(shared('repo.portrait.unsaved') || {}).some(([key, value]) => key.startsWith(id + ':') && value)) {
         this.confirmRemove=id;
         cx.notify();
         return;
       }
-      const tree = removeLane(layout(), id);
+      const current = layout();
+      const last = laneIds(current).length === 1 && laneIds(current)[0] === id;
+      if (last && !lastChoice) {
+        this.confirmLast={id, discard};
+        this.confirmRemove=null;
+        cx.notify();
+        return;
+      }
+      const tree = removeLane(current, id);
       run('layout.set', {
         layout: tree
       });
@@ -864,6 +877,8 @@ export default class Portrait extends View {
       // A pending open must not put a closed stream back in this view.
       setShared('repo.open-requests', Object.fromEntries(Object.entries(shared('repo.open-requests') || {}).filter(([, request]) => request?.lane !== id)));
       closeOverlay(props()?.overlay);
+      // Each managed window is its own Herdr app instance; never stop hc.
+      if (last && lastChoice === 'close') run('app.quit');
     } catch (e) {
       this.error = e?.message || (e ? String(e) : 'Could not close this view. Reopen the stream menu and try again.');
       cx.notify();
