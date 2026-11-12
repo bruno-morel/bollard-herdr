@@ -343,8 +343,8 @@ role dropdown.
 ### Published Docker ports and test freshness
 
 The optional right-hand information panel’s **Docker containers** view shows
-published-port badges inside each container card, with its container port beside
-them. The main Docker pane stays focused on logs. Copy the host address, or copy a web URL when the
+compact published-port badges aligned right with their copy controls inside each
+container card. Container port/protocol and RAM-limit details are available on hover. The main Docker pane stays focused on logs. Copy the host address, or copy a web URL when the
 protocol is declared or suggested by a common web port. Suggested URLs are
 labelled; the panel does not probe the service. Remote addresses use the Docker
 host, not the laptop. Remote loopback bindings need an SSH tunnel and do not

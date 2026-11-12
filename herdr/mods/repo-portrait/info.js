@@ -127,17 +127,15 @@ export default class Info extends View {
     .child(h_flex().gap(8).items_center()
      .child(div().flex_1().text_size(10).text_color(t.muted).child(ok?'Up '+duration(s.UptimeSeconds):'Stopped'))
      .child(div().text_size(10).text_color(s.Restarts?colors.amber:t.dim).tooltip('Container restart count').child('↻ '+(s.Restarts??'—'))))
-    .children(publishedPorts([s],c?.on).map(p=>h_flex().gap(5).items_center().flex_wrap()
-     .child(div().px(8).py(3).rounded(6).bg(t.selected).text_color(t.foreground).text_size(19).font_semibold().tooltip(p.note).child(':'+p.port))
-     .child(div().flex_1().text_size(10).text_color(t.muted).child('→ '+p.target+'/'+p.protocol))
+    .children(publishedPorts([s],c?.on).map(p=>h_flex().gap(4).items_center().justify_end().flex_wrap()
+     .child(div().px(6).py(2).rounded(5).bg(t.selected).text_color(t.foreground).text_size(12).font_semibold().tooltip(p.target+'/'+p.protocol+' · '+p.note).child(':'+p.port))
      .when(!!p.address,r=>r.child(button('address-'+p.key,'Copy address',(_e,cx)=>{cx.write_to_clipboard(p.address);notify({title:'Address copied',body:p.address});},{icon:'copy',compact:true}).tooltip(p.address+' · '+p.note)))
      .when(!!p.url,r=>r.child(button('url-'+p.key,p.suggested?'Copy suggested URL':'Copy URL',(_e,cx)=>{cx.write_to_clipboard(p.url);notify({title:'URL copied',body:p.url});},{icon:'external',compact:true}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note)))))
     .when(!!ram,e=>e.child(v_flex().gap(4).tooltip('RAM used / '+ram.kind+'. Docker reports memory usage excluding reclaimable cache on Linux.')
      .child(h_flex().gap(6).items_center()
       .child(div().flex_1().text_size(10).text_color(t.muted).child('RAM '+ram.used+' / '+ram.limit))
       .child(div().text_size(10).text_color(level(mem??0)).child(mem===null?'—':Math.round(mem)+'%')))
-     .child(meter('memory-'+s.ID,mem,'RAM against '+ram.kind,null,5))
-     .when(!ram.capped,e=>e.child(div().text_size(9).text_color(t.dim).child(ram.kind==='shared host limit'?'No container cap · shares Docker host RAM':'Limit reported by Docker')))))
+     .child(meter('memory-'+s.ID,mem,'RAM against '+ram.kind,null,5))))
     .when(!m&&ok,e=>e.child(caption('Memory reading unavailable.'))));
   }
   if(!services.length)content=content.child(caption(this.services?.state==='unprepared'?'This stream hasn’t prepared a Docker stack yet.':this.services?'No containers in this Compose project.':'Loading containers…'));
