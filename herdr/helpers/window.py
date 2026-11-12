@@ -145,7 +145,7 @@ def agent_windows(source, context):
    if not owner or Path(owner).resolve()!=origin:continue
   if not (home/'herdr-app.sock').is_socket():continue
   state=load(home/'shared.json',{}) or {}
-  for lane,c in state.get('repo.portrait.lanes',{}).items():
+  for lane,c in state.get('repo.portrait.displayed',state.get('repo.portrait.lanes',{})).items():
    exact=c.get('terminal')==context.get('terminal')
    parent=c.get('terminal')==context.get('parent') and bool(context.get('parent'))
    same=(bool(context.get('cwd')) and c.get('cwd')==context['cwd'] and c.get('on')==context.get('on')

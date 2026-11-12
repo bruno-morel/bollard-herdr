@@ -211,10 +211,10 @@ export default class Portrait extends View {
           }
           if (cmd.startsWith('attention-focus:')) {
             const target=JSON.parse(decodeURIComponent(cmd.slice(16)));
-            if(target.exact && laneIds(layout()).includes(target.lane)){
+            if(laneIds(layout()).includes(target.lane)){
               view(target.lane,null);
               run('pane.focus',{terminal:target.terminal});
-            }else run('terminal.peek',{terminal:target.terminal});
+            }else notify({title:'Stream view is no longer open',body:'Select the conversation with the stream picker.',level:'info'});
             cx.notify();continue;
           }
           if (cmd.startsWith('retry-checkpoint:')) {
@@ -398,6 +398,14 @@ export default class Portrait extends View {
       this.agentStates[row.address] = state;
     }
     if (completionChanged) setShared(COMPLETE, complete);
+    // Publish the displayed terminal, which can differ from a saved stream pin
+    // after restarting a conversation. Other windows use this for navigation.
+    const displayed = Object.fromEntries(laneIds(current).map(lane => {
+      const c=laneConfig(lane), lead=leadFor(terminals(),c);
+      return [lane,{...c,terminal:lead?.address||null}];
+    }));
+    if(JSON.stringify(shared('repo.portrait.displayed'))!==JSON.stringify(displayed))
+      setShared('repo.portrait.displayed',displayed);
     const copy = JSON.parse(JSON.stringify(current));
     let changed = false;
     const selected = shared(VIEWS) || {};

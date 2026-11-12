@@ -1,4 +1,4 @@
-import {exec,appHome,run,notify} from 'herdr';
+import {exec,appHome,notify} from 'herdr';
 export function attentionRows(rows){
  const seen=new Set();
  return rows.filter(r=>{
@@ -21,6 +21,6 @@ export async function focusAttention(row){
   const r=await exec('python3',[appHome()+'/helpers/window.py','focus-agent','--source',appHome(),'--context',JSON.stringify(row.context)]);
   if(r.code)throw Error(r.stderr||r.stdout);
   const result=JSON.parse(r.stdout);
-  if(!result.found)run('terminal.peek',{terminal:row.address});
+  if(!result.found)notify({title:'No open window for this agent',body:'This conversation is not displayed in an open stream window. Select it with the stream picker.',level:'info'});
  }catch(e){notify({title:'Cannot show waiting agent',body:String(e),level:'warning'});}
 }

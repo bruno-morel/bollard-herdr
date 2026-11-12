@@ -68,8 +68,8 @@ the right. Changing one view's tool does not change the other stream.
 
 The attention indicator appears before the window controls. Ordinary idle agents
 are not counted, and the same terminal in multiple views is counted once. Helpers
-open in their stream’s window. If no matching window is open, the conversation
-is shown in the current window without starting another agent. Window activation
+route to their stream’s window. If no matching window is open, a message asks you
+to select the conversation with the stream picker. No preview or new window is opened. Window activation
 is supported on macOS; navigation does not consume model allowance.
 
 The toolbar groups related tools: **Conversation / Questions**, **Docs / Files /

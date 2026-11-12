@@ -49,7 +49,7 @@ class Windows(unittest.TestCase):
             root=Path(d).resolve();child=root/'screens/w-child';child.mkdir(parents=True)
             W.save(root/'shared.json',{'repo.portrait.lanes':{'top':dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t1')}})
             W.save(child/'repo-window.json',dict(origin=str(root)))
-            W.save(child/'shared.json',{'repo.portrait.lanes':{'bottom':dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t2')}})
+            W.save(child/'shared.json',{'repo.portrait.lanes':{'bottom':dict(terminal='box/old')},'repo.portrait.displayed':{'bottom':dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t2')}})
             (root/'screens/a.lock').touch()
             ctx=dict(cwd='/repo',stream='demo',role='work',on='box',terminal='box/t2')
             with patch.object(Path,'is_socket',return_value=True):

@@ -13,3 +13,14 @@ test('duplicates across windows count once; helpers preserve parent and host',()
  const results=attentionRows([child,child]);assert.equal(results.length,1);
  assert.deepEqual(results[0].context,{terminal:'box/t2',parent:'box/t1',on:'box',cwd:'/repo',stream:'demo',role:'helper'});
 });
+
+test('missing window reports a message instead of opening a preview',async()=>{
+ const messages=[];
+ const source=src.replace("export async function focusAttention(row)","export async function focusAttention(row)");
+ globalThis.__attentionMessages=messages;
+ const prefix="const exec=async()=>({code:0,stdout:JSON.stringify({found:false})});const appHome=()=>'/app';const notify=x=>globalThis.__attentionMessages.push(x);";
+ const mod=await import('data:text/javascript;base64,'+Buffer.from(prefix+source).toString('base64'));
+ await mod.focusAttention({address:'box/t1',context:{terminal:'box/t1'}});
+ assert.equal(messages[0].title,'No open window for this agent');
+ delete globalThis.__attentionMessages;
+});
