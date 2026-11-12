@@ -19,3 +19,9 @@ test('failures have one repair action, even stale or invalid config',()=>{
 test('queued diagnosis is visible and prevents a second launch',()=>{
  for(const state of ['launching','investigating','waiting'])assert.equal(primaryAction({failure_prompt:'evidence',repair:{state}}).disabled,true);
 });
+
+test('repair progress is not a passing result or duplicate fix button',()=>{
+ assert.equal(primaryAction({failure_prompt:'old',progress:{phase:'sent'}}).disabled,true);
+ assert.equal(primaryAction({failure_prompt:'old',progress:{phase:'fixing',label:'Fixing',active:true}}).disabled,true);
+ assert.equal(primaryAction({failure_prompt:'old',configured:true,progress:{phase:'awaiting-tests'}}).action,'run');
+});

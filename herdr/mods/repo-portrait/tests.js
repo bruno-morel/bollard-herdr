@@ -13,6 +13,9 @@ export function primaryAction(s,busy=false,pending=false){
  if(s.state==='preparing')return {label:'Preparing first run…',disabled:true};
  if(['queued','running'].includes(s.state))return {label:'Tests running…',disabled:true};
  if(['launching','investigating','waiting'].includes(s.repair?.state))return {label:s.repair.state==='waiting'?'Repair queued · waiting for agent':'Investigating failures…',disabled:true};
+ if(s.progress?.active)return {label:s.progress.label+'…',disabled:true};
+ if(s.progress?.phase==='awaiting-tests')return {label:'Verify fix',action:'run',icon:'play'};
+ if(s.progress?.phase==='sent')return {label:'Repair requested',disabled:true};
  if(s.failure_prompt)return {label:'Find why and fix',action:'fix',icon:'test'};
  if(!s.configured)return {label:'First tests run',action:'first',icon:'play'};
  return {label:s.results?.length?'Rerun tests':'First tests run',action:'run',icon:'play'};
@@ -75,17 +78,20 @@ export default class Tests extends View {
  render(cx){
   const c=scopedLocation(),t=theme();
   if(this.key!==c?.key){this.key=c?.key;this.generation++;this.busy=false;this.data=null;this.error='';this.actionError='';this.pendingSetup=false;this.chosen=null;this.showCommands=false;this.logOpen=false;this.editor.set_value('');this.refresh(cx,true);}
-  const s=this.data,action=primaryAction(s,this.busy,this.pendingSetup),missing=!!s&&!s.configured&&!s.failure_prompt;
+  const s=this.data,progress=s?.progress,ink=progress?.tone==='error'?'#be4148':progress?.tone==='success'?'#398458':progress?.tone==='warning'?'#9b6610':t.muted,action=primaryAction(s,this.busy,this.pendingSetup),missing=!!s&&!s.configured&&!s.failure_prompt;
   reportPanel('tests',c,this.error||this.actionError||['failed','incomplete'].includes(s?.state));
   return v_flex().size_full().min_h(0).p(4).bg(toolColors().background).text_color(t.foreground).gap(6)
    .child(h_flex().px(12).py(6).gap(8).items_center().flex_wrap().justify_end().flex_none()
     .when(missing&&!this.pendingSetup,e=>e.child(h_flex().gap(4).children(['codex','claude','cursor'].map(a=>button('tests-agent-'+a,a,(_e,cx)=>{if(!this.busy){this.setupAgent=a;cx.notify();}},{selected:this.setupAgent===a})))))
-    .child(button('tests-primary',action.label,(_e,cx)=>{if(!action.disabled)this.action(action.action,cx);},{icon:action.icon||'test',strong:true}).opacity(action.disabled ? 0.55 : 1))
+    .child(button('tests-primary',action.label,(_e,cx)=>{if(!action.disabled)this.action(action.action,cx);},{icon:action.icon||'test',strong:true}).rounded(3).py(6).bg(ink).text_color('#ffffff').opacity(action.disabled ? 0.55 : 1))
     .when(!!s?.configured,e=>e.child(button('tests-commands',this.showCommands?'Hide commands':'Show commands',(_e,cx)=>{this.showCommands=!this.showCommands;cx.notify();},{icon:'list',selected:this.showCommands})))
     .when(!!s?.setup_terminal,e=>e.child(button('tests-child','Open test helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.setup_terminal}),{icon:'agents'})))
+    .when(!!s?.repair?.target,e=>e.child(button('tests-lead','View repair conversation',()=>this.conversation(),{icon:'message',compact:true})))
+    .when(!!s?.repair?.terminal,e=>e.child(button('tests-repair-helper','View diagnosis',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.repair.terminal}),{icon:'agents',compact:true})))
     .child(button('tests-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
-   .when(!!s?.repair?.message,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.repair.message)))
-   .when(!!s?.repair?.terminal,e=>e.child(button('tests-repair-helper','Open repair helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.repair.terminal}),{icon:'agents'})))
+   .when(!!progress,e=>e.child(h_flex().px(12).py(5).gap(8).items_center().flex_wrap().flex_none().bg(ink+'12')
+    .child(div().text_size(12).font_semibold().text_color(ink).tooltip(progress.detail||progress.label).child(progress.label))
+    .child(div().text_size(11).text_color(t.muted).child(progress.summary))))
    .when(!!this.error||!!this.actionError,e=>e.child(div().px(12).text_size(12).text_color(t.blocked).child(this.actionError||this.error)))
    .when(missing,e=>e.child(v_flex().flex_1().min_h(0).id('tests-setup-scroll').overflow_y_scrollbar().p(20).gap(10)
     .child(svg('mods/repo-portrait/icons/test.svg').size(34).text_color(t.accent))
@@ -97,11 +103,6 @@ export default class Tests extends View {
     .when(!!s.message,e=>e.child(div().text_size(12).text_color(t.muted).child(s.message)))
     .when(!!s.config_error,e=>e.child(div().mt(4).text_size(11).text_color(t.muted).child(s.config_error)))))
    .when(!missing,e=>e
-    .child(div().px(12).child(caption(s?.message||'Runs the saved checks. No model usage for reruns.')))
-    .when(s?.state==='stale',e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Historical results — not the current checkout. Tests run directly by an agent are not automatically imported here.')))
-    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Find why and fix uses the idle lead, or starts a read-only Codex/Cursor diagnosis while it is busy and queues repair for when it is idle. No competing edits or independent review. Stale failures are verified first.')))
-    .when(!!s?.checks,e=>e.child(div().px(12).text_size(11).text_color(t.muted).child(s.checks.length+' configured checks · Up to '+Math.ceil(s.checks.reduce((n,x)=>n+(x.timeout||120),0)/60)+' minutes'+(s.current?' · Running '+s.current:''))))
-    .when(!!s?.setup_summary,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.setup_summary+' · '+s.setup_limitations)))
     .when(this.showCommands,e=>e.child(v_flex().id('tests-commands-list').max_h(140).flex_none().overflow_y_scrollbar().px(12).py(5).gap(5)
      .children((s?.checks||[]).map(x=>div().text_size(11).text_color(t.muted).child(x.id+' · '+x.argv.join(' '))))))
     .child(resultsView(s,this.logOpen?this.chosen:null,(id,cx)=>{this.logOpen=!(this.logOpen&&this.chosen===id);this.chosen=id;this.showLog();cx.notify();}))

@@ -828,7 +828,11 @@ class Panel:
         if d.get("state") in ("queued", "running", "preparing"):
             self.message = "Tests are already running."
             return
-        if d.get("failure_prompt"):
+        progress=d.get("progress", {})
+        if progress.get("active") or progress.get("phase")=="sent":
+            self.message=progress.get("label", "Repair in progress")
+            return
+        if d.get("failure_prompt") and progress.get("phase")!="awaiting-tests":
             out = self.busy("Requesting focused fix…", lambda: self.b.work(
                 self.row, "tests", "fix", W.label(self.row, "stream"),
                 "--target", self.address.rsplit("/", 1)[-1], "--json"))
@@ -1405,14 +1409,18 @@ class Panel:
             if self.preview:
                 self.paint_text(self.preview.get("text", ""), y, 1, height, w - 1)
             else:
-                self.button(y, 1,
-                    "R Find why and fix" if d.get("failure_prompt") else
-                    "R Rerun tests" if d.get("configured") else "R First tests run",
-                    "tests-run", color=4 if d.get("failure_prompt") else 1)
-                if d.get("repair", {}).get("message"):
+                progress=d.get("progress", {})
+                pending=progress.get("active") or progress.get("phase")=="sent"
+                label=(progress.get("label", "Repair in progress") if pending else
+                       "R Verify fix" if progress.get("phase")=="awaiting-tests" else
+                       "R Find why and fix" if d.get("failure_prompt") else
+                       "R Rerun tests" if d.get("configured") else "R First tests run")
+                self.button(y, 1, label, "tests-run", color=4 if d.get("failure_prompt") else 1)
+                if progress:
                     y += 1
                     height -= 1
-                    self.ui.put(y, 1, d["repair"]["message"], self.ui.color(3))
+                    color={"error":4,"success":2,"warning":3}.get(progress.get("tone"),1)
+                    self.ui.put(y, 1, progress["label"]+" · "+progress["summary"], self.ui.color(color))
                 self.index = max(0, min(self.index, len(self.rows) - 1))
                 start = max(0, self.index - height + 3)
                 for i, row in enumerate(self.rows[start : start + height - 2], start):

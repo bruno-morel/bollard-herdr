@@ -381,3 +381,20 @@ handoff reuses its saved diagnosis when the test run and lead still match; it
 does not spend another model call. Old failing results are evidence to verify,
 not proof that the current code still fails. No Claude review is started by this
 recovery.
+
+### Test repair progress
+
+Tests shows a compact coloured stage and check totals in desktop and TUI:
+**Investigating → Fixing → Rerunning tests**, followed by fresh passed/failed
+results. **Waiting for lead** means the current task continues uninterrupted.
+**Repair requested** confirms delivery only. Existing conversations that have
+not reported a stage show **Agent working · stage not reported**; when finished,
+**Awaiting verification** offers **Verify fix**. Old results are labelled
+**Previous run**, never presented as proof of a successful repair.
+
+New repair prompts report stages with `work tests progress <stream> --run <run-id>
+--phase investigating|fixing|awaiting-tests|blocked --message 'short detail'`
+(select one phase). These reports cannot grant passing status. Only the saved
+runner results establish check outcomes; direct shell tests are not silently
+imported. Logs remain available per check. Hover the stage for extra detail.
+No extra reviewer calls or Claude allowance changes are involved.
