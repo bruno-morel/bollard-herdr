@@ -370,3 +370,14 @@ implementation and independent-review flow.
 
 CLI equivalent: `work tests fix <stream> --target tID --json`. A normal model-free
 rerun remains available with `work tests run <stream>`.
+
+### Repair handoff recovery
+
+A completed (`done`) lead can receive a repair just like an idle lead. Busy leads
+keep their current task; the repair coordinator waits. A structured Herdr refusal
+that explicitly says nothing was typed is safe to retry. Lost acknowledgements
+remain blocked to prevent duplicate instructions. Retrying a legacy rejected
+handoff reuses its saved diagnosis when the test run and lead still match; it
+does not spend another model call. Old failing results are evidence to verify,
+not proof that the current code still fails. No Claude review is started by this
+recovery.

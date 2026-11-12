@@ -1,4 +1,5 @@
 """One-click diagnosis and deferred repair; never write into a busy lead checkout."""
+import json
 import os
 import re
 import sys
@@ -9,6 +10,23 @@ ACTIVE = ('launching', 'investigating', 'waiting')
 SCHEMA = {'type':'object','additionalProperties':False,'properties':{
     'diagnosis':{'type':'string'}, 'limitations':{'type':'string'},
     'next_steps':{'type':'string'}},'required':['diagnosis','limitations','next_steps']}
+
+
+def not_typed(message):
+    """Only trust hc's structured, explicit refusal, never arbitrary error text."""
+    try:
+        error=json.loads(message)['error']
+        return error.get('kind')=='status_mismatch' and error.get('hint')=='nothing was typed'
+    except (ValueError,KeyError,TypeError,AttributeError):
+        return False
+
+
+def saved_report(R,runtime,job):
+    token=job.get('token','')
+    if not re.fullmatch(r'[0-9a-f]{12}',token):return None
+    result=R.read(runtime/('repair-'+token)/'report.json',{})
+    if not isinstance(result,dict) or any(not isinstance(result.get(k),str) for k in SCHEMA['required']):return None
+    return '\n'.join(k+': '+result[k] for k in SCHEMA['required'])[:12000]
 
 
 def status(T, runtime):
@@ -47,24 +65,31 @@ def request(T, ctx, target):
         if evidence['state'] in ('queued','running','preparing'):
             T.fail('Wait for this test run to finish before requesting repair')
         old = status(T, runtime)
-        if old.get('state') in ACTIVE or (old.get('run')==evidence.get('token') and old.get('state') in ('sent','uncertain','interrupted')):
+        retry = (old.get('run')==evidence.get('token') and old.get('target')==target
+                 and old.get('state') in ('uncertain','rejected') and not_typed(old.get('message','')))
+        diagnosis = saved_report(T.R,runtime,old) if retry else None
+        if not retry and (old.get('state') in ACTIVE or (old.get('run')==evidence.get('token') and old.get('state') in ('sent','uncertain','interrupted'))):
             return dict(old, message=old['message']+' No duplicate request was started.')
+        if diagnosis:T.retry_rejected(ctx,old,diagnosis)
         if idle(row):
-            result = T.send(ctx,target,repair=True)
+            result = T.send(ctx,target,repair=True,diagnosis=diagnosis)
             job = dict(state='sent',run=evidence['token'],target=target,
                        message=result['message'],heartbeat=time.time())
             T.R.write(runtime/'repair.json',job)
             return job
         name = 'cursor' if labels.get('repo-tools.agent')=='cursor' else 'codex'
         binary = T.agents.executable(name)
-        token = uuid.uuid4().hex[:12]
+        token = old['token'] if diagnosis else uuid.uuid4().hex[:12]
         job = dict(state='launching',token=token,run=evidence['token'],target=target,
             agent=name,binary=binary,heartbeat=time.time(),started=T.R.now(),
             message='Starting a read-only '+name+' diagnosis; repair will go to the lead when idle.')
+        if diagnosis:
+            job['diagnosis']=diagnosis
+            job['message']='Reusing completed diagnosis; waiting for the lead to become available.'
         T.R.write(runtime/'repair.json',job)
         space = labels.get('herdr.space') or 'stream-'+key+'-'+stream
         argv = ['run','--bg','--keep','--parent',target,'--outlive-parent','--no-notify',
-                '--name','test-repair-'+token,'--cwd',str(root)]
+                '--name','test-repair-'+uuid.uuid4().hex[:12],'--cwd',str(root)]
         tags = {'repo-tools.repo':key,'repo-tools.stream':stream,'repo-tools.role':'helper',
                 'repo-tools.checkout':str(root),'repo-tools.agent':name,'repo-tools.task':'test-repair',
                 'herdr.space':space,'herdr.tab':space+'-repair-'+token[:4]}
@@ -91,20 +116,23 @@ def worker(T, stream, token):
         try:
             parent(T,ctx,job['target'])
             job['terminal']=os.environ.get('HC_TERMINAL_ID')
-            folder=runtime/('repair-'+token);folder.mkdir()
-            T.R.write(folder/'schema.json',SCHEMA)
-            evidence=T.snapshot(ctx)
-            prompt=T.failure_prompt(evidence)+'''\nThis is a READ-ONLY diagnosis while the lead edits this checkout. Do not edit files or run tests, install packages, change Docker, commit, push, spawn agents, or message the lead. Compare captured failures with current check configuration and relevant project tooling. Files may change while you read; state that limitation. Distinguish stale evidence and runner errors from confirmed product defects. Return JSON with diagnosis, limitations, next_steps. Keep it focused; no full regression. The controller will ask the lead to verify and repair when idle.'''
-            (folder/'prompt.txt').write_text(prompt)
-            tick('investigating','Read-only '+job['agent']+' helper is investigating. Your main agent continues working.')
-            argv=T.setup_argv(job['agent'],job['binary'],root,folder,prompt)
-            code=T.R.process(argv,root,folder/'agent.log',300,tick=tick)
-            if code: T.fail('Diagnosis stopped (exit '+str(code)+'). Inspect the helper log; no repair was sent.')
-            result=T.agents.structured_result(job['agent'],folder)
-            if not isinstance(result,dict) or any(not isinstance(result.get(k),str) for k in SCHEMA['required']):
-                T.fail('Diagnosis did not return a usable report; no repair was sent')
-            report='\n'.join(k+': '+result[k] for k in SCHEMA['required'])[:12000]
-            T.R.write(folder/'report.json',result)
+            folder=runtime/('repair-'+token)
+            report=job.get('diagnosis')
+            if not report:
+                folder.mkdir()
+                T.R.write(folder/'schema.json',SCHEMA)
+                evidence=T.snapshot(ctx)
+                prompt=T.failure_prompt(evidence)+'''\nThis is a READ-ONLY diagnosis while the lead edits this checkout. Do not edit files or run tests, install packages, change Docker, commit, push, spawn agents, or message the lead. Compare captured failures with current check configuration and relevant project tooling. Files may change while you read; state that limitation. Distinguish stale evidence and runner errors from confirmed product defects. Return JSON with diagnosis, limitations, next_steps. Keep it focused; no full regression. The controller will ask the lead to verify and repair when idle.'''
+                (folder/'prompt.txt').write_text(prompt)
+                tick('investigating','Read-only '+job['agent']+' helper is investigating. Your main agent continues working.')
+                argv=T.setup_argv(job['agent'],job['binary'],root,folder,prompt)
+                code=T.R.process(argv,root,folder/'agent.log',300,tick=tick)
+                if code: T.fail('Diagnosis stopped (exit '+str(code)+'). Inspect the helper log; no repair was sent.')
+                result=T.agents.structured_result(job['agent'],folder)
+                if not isinstance(result,dict) or any(not isinstance(result.get(k),str) for k in SCHEMA['required']):
+                    T.fail('Diagnosis did not return a usable report; no repair was sent')
+                report='\n'.join(k+': '+result[k] for k in SCHEMA['required'])[:12000]
+                T.R.write(folder/'report.json',result)
             tick('waiting','Diagnosis ready. Waiting for the current lead to become idle; repair will be sent automatically.')
             deadline=time.monotonic()+24*60*60
             while time.monotonic()<deadline:
@@ -119,7 +147,12 @@ def worker(T, stream, token):
                     else:
                         # Mark delivery uncertain before send: a crash must not replay it.
                         tick('uncertain','Sending the repair request; inspect the lead if acknowledgement is lost.')
-                        T.send(ctx,job['target'],repair=True,diagnosis=report)
+                        try:
+                            T.send(ctx,job['target'],repair=True,diagnosis=report)
+                        except T.NotDelivered as exc:
+                            tick('waiting','Lead status changed before delivery; waiting to retry safely.')
+                            time.sleep(5)
+                            continue
                         tick('sent','Repair requested in the original conversation. Follow its progress there; test results are not yet verified.')
                         return
                 tick()

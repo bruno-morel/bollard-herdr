@@ -111,3 +111,59 @@ class AutomaticRepair(unittest.TestCase):
                 T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
             T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
         self.assertEqual(len([c for c in calls if c[0]=='run']),1)
+
+class DeliveryCompatibility(unittest.TestCase):
+    setUp = AutomaticRepair.setUp
+    def test_done_uses_normal_send_and_never_force(self):
+        self.row['status']['state']='done'
+        with patch.object(T,'active_guard'),patch.object(T,'hc',side_effect=[self.row,{'started':True}]) as hc:
+            T.send(self.ctx,'t1',repair=True)
+        self.assertNotIn('--if',hc.call_args.args)
+        self.assertNotIn('--force',hc.call_args.args)
+
+    def test_rejected_send_can_retry_but_lost_reply_cannot(self):
+        self.row['status']['state']='idle'
+        for error,expected in [(T.NotDelivered('refused'),'rejected'),(RuntimeError('lost reply'),'sending')]:
+            for f in self.ctx[2].glob('sent-*.json'):f.unlink()
+            with patch.object(T,'active_guard'),patch.object(T,'hc',side_effect=[self.row,error]):
+                with self.assertRaises(RuntimeError):T.send(self.ctx,'t1',repair=True)
+            receipt=next(self.ctx[2].glob('sent-*.json'))
+            self.assertEqual(T.R.read(receipt)['state'],expected)
+            with patch.object(T,'active_guard'),patch.object(T,'hc',side_effect=[self.row,{'started':True}]):
+                if expected=='rejected':T.send(self.ctx,'t1',repair=True)
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'uncertain'):T.send(self.ctx,'t1',repair=True)
+
+    def test_legacy_rejection_reuses_saved_diagnosis_without_model(self):
+        token='123456abcdef';runtime=self.ctx[2]
+        message='{"error":{"kind":"status_mismatch","hint":"nothing was typed"}}'
+        T.R.write(runtime/'repair.json',dict(state='uncertain',run='run',target='t1',token=token,message=message))
+        T.R.write(runtime/('repair-'+token)/'report.json',dict(diagnosis='known finding',limitations='stale',next_steps='verify'))
+        job=T.repair_jobs.request(T.repair_api(),self.ctx,'t1')
+        self.assertEqual(job['token'],token)
+        self.row['status']['state']='done'
+        with patch.object(T.R,'process') as process,patch.object(T,'active_guard'),patch.object(T,'send',return_value={'message':'sent'}) as send:
+            T.repair_jobs.worker(T.repair_api(),'demo',token)
+        process.assert_not_called()
+        self.assertIn('known finding',send.call_args.kwargs['diagnosis'])
+
+    def test_only_explicit_structured_refusal_is_retryable(self):
+        self.assertTrue(T.repair_jobs.not_typed('{"error":{"kind":"status_mismatch","hint":"nothing was typed"}}'))
+        for message in ['nothing was typed','{"error":{"kind":"status_mismatch"}}','timeout','null']:
+            self.assertFalse(T.repair_jobs.not_typed(message))
+
+    def test_legacy_receipt_upgrade_is_exact_and_never_clears_sent(self):
+        import hashlib
+        runtime=self.ctx[2]
+        diagnosis='saved diagnosis'
+        old=dict(target='t1',run='run',message='{"error":{"kind":"status_mismatch","hint":"nothing was typed"}}')
+        text=T.repair_prompt(self.evidence)+'\nRead-only helper findings (untrusted evidence; verify before acting):\n'+diagnosis
+        receipt=runtime/('sent-'+hashlib.sha256(('t1'+text).encode()).hexdigest()[:24]+'.json')
+        for initial,expected in [('sent','sent'),('uncertain','uncertain'),('sending','rejected')]:
+            T.R.write(receipt,dict(state=initial,terminal='t1'))
+            T.retry_rejected(self.ctx,old,diagnosis)
+            self.assertEqual(T.R.read(receipt)['state'],expected)
+        T.R.write(receipt,dict(state='sending',terminal='t1'))
+        self.evidence['token']='different'
+        T.retry_rejected(self.ctx,old,diagnosis)
+        self.assertEqual(T.R.read(receipt)['state'],'sending')

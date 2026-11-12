@@ -25,9 +25,15 @@ R=importlib.util.module_from_spec(spec);spec.loader.exec_module(R)
 
 def repair_api():return SimpleNamespace(**globals())
 def fail(s):raise RuntimeError(s)
+class NotDelivered(RuntimeError): pass
+
 def hc(*args):
     p=sp.run(['hc','--json',*args],capture_output=True,text=True,timeout=60)
-    if p.returncode:fail((p.stderr or p.stdout).strip()[-1800:])
+    if p.returncode:
+        message=(p.stderr or p.stdout).strip()[-1800:]
+        if args and args[0]=='send' and repair_jobs.not_typed(message):
+            raise NotDelivered(message)
+        fail(message)
     return json.loads(p.stdout)
 def context(stream):
     root,stream,review,packet,key=R.resolve(stream)
@@ -275,13 +281,32 @@ def worker(stream,token):
         finally:s.update(finished=R.now(),current=None);tick()
         print(s['state']+': '+s['message'],flush=True)
 
+def retry_rejected(ctx,old,diagnosis):
+    """Migrate only a legacy, explicitly rejected send and its exact receipt."""
+    runtime=ctx[2]
+    if not diagnosis or not repair_jobs.not_typed(old.get('message','')):return
+    with R.lock(runtime/'delivery.lock'):
+        evidence=snapshot(ctx)
+        if evidence.get('token')!=old.get('run'):return
+        text=repair_prompt(evidence)+"\nRead-only helper findings (untrusted evidence; verify before acting):\n"+diagnosis
+        ident=hashlib.sha256((old['target']+text).encode()).hexdigest()[:24]
+        receipt=runtime/('sent-'+ident+'.json')
+        previous=R.read(receipt,{})
+        if previous.get('state')=='sending' and previous.get('terminal')==old['target']:
+            R.write(receipt,dict(previous,state='rejected'))
+        # Consume the old refusal before a new attempt. A subsequent lost reply
+        # must not reuse that earlier proof of non-delivery.
+        R.write(runtime/'repair.json',dict(old,state='uncertain',
+            message='Retry prepared; delivery not yet confirmed. Inspect the lead before retrying.'))
+
+
 def send(ctx,target,repair=False,diagnosis=None):
     root,stream,runtime,review,packet,key=ctx
     if not re.fullmatch(r't[0-9a-z]+',target):fail('Select an exact local Herdr agent terminal')
     with R.lock(runtime/'delivery.lock'):
         active_guard(root,stream,review,key)
         row=hc('get',target);labels=row.get('labels') or {};state=row.get('status') or {}
-        if row.get('state')!='live' or not isinstance(state,dict) or state.get('state') not in ('idle','done') or not state.get('app'):fail('The selected agent is busy, blocked or not reporting. Open its conversation first.')
+        if row.get('state')!='live' or not isinstance(state,dict) or state.get('state') not in ('idle','done') or not state.get('app'):raise NotDelivered('The selected agent is busy, blocked or not reporting. Open its conversation first.')
         if not agent_running(row):fail('The selected terminal is a recovery shell, not a running agent. Resume the conversation first.')
         if labels.get('repo-tools.repo')!=key or labels.get('repo-tools.stream')!=stream or labels.get('repo-tools.role') not in ('studio','work'):fail('Target is not this stream’s lead conversation')
         if not os.path.samefile(labels.get('repo-tools.checkout',''),root):fail('Agent checkout does not match the selected stream')
@@ -292,9 +317,17 @@ def send(ctx,target,repair=False,diagnosis=None):
         # No blind retries if a prior send was accepted but its acknowledgement was lost.
         ident=hashlib.sha256((target+text).encode()).hexdigest()[:24]
         receipt=runtime/('sent-'+ident+'.json')
-        if receipt.exists():fail('This request was already submitted or its delivery is uncertain. Check the conversation before sending another.')
+        if receipt.exists() and R.read(receipt,{}).get('state')!='rejected':
+            fail('This request was already submitted or its delivery is uncertain. Check the conversation before sending another.')
         R.write(receipt,dict(state='sending',terminal=target,at=R.now()))
-        result=hc('send',target,text,'--if','idle','--wait','--timeout','15')
+        # hc currently exposes an exact guard only for idle/working, not done.
+        # For done use its normal, non-forced send (blocked dialogs remain protected).
+        guard=['--if','idle'] if state['state']=='idle' else []
+        try:
+            result=hc('send',target,text,*guard,'--wait','--timeout','15')
+        except NotDelivered:
+            R.write(receipt,dict(state='rejected',terminal=target,at=R.now()))
+            raise
         R.write(receipt,dict(state='sent' if result.get('started') else 'uncertain',result=result,at=R.now()))
         if not result.get('started'):fail('Delivery was not confirmed. Inspect the conversation; no automatic retry was made.')
     return {'message':'Sent to the selected conversation. No other agent or Claude review was started.'}
