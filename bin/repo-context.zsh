@@ -23,6 +23,11 @@ ensure_scratch() {
     mkdir -p "$checkout/scratch"
 }
 
+# Only Zellij-facing commands need its socket alias. Herdr preparation and
+# document operations must work without inspecting another interface's state.
+case "${1:-}" in
+    prepare|path|init|idea|asset|handoff|prompt|copy|list|ls|agent-prompt|_herdr-start|_herdr-pane|_herdr-env) return 0 ;;
+esac
 # Short Zellij socket path v1
 if [[ "$OSTYPE" == darwin* ]]; then
     ZELLIJ_SOCKET_DIR="$(python3 "${${(%):-%N}:A:h}/repo-zellij-socket.py")" || return 1

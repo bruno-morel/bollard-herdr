@@ -1,5 +1,20 @@
 # Setup
 
+## Get the setup repository
+
+Start in a normal terminal on your laptop. Install Git and Python 3.9+ first
+if needed (`brew install git python` on macOS with Homebrew), then:
+
+```sh
+mkdir -p ~/src
+git clone https://github.com/bruno-morel/bollard-herdr.git ~/src/bollard-herdr
+cd ~/src/bollard-herdr
+```
+
+This is the **tooling repository**, not the app/product repository you will work
+on. Keep it at this path after installing the optional shell shortcut below.
+If already cloned, use that checkout rather than cloning over it.
+
 ## Prerequisites
 
 From the Bollard checkout, start with:
@@ -94,6 +109,11 @@ flowchart TB
 
 Clone this repository on **each** machine. From its checkout:
 
+For a remote host, first verify SSH from the laptop (`ssh your-user@your-server`).
+Accept its host key only after checking it, then use a normal remote shell to
+repeat the clone, prerequisite installation and checks above. Agent login,
+project files and Docker belong on that host, not on the viewing laptop.
+
 ```sh
 # Laptop
 ./install.sh all --check-deps
@@ -110,6 +130,11 @@ After `hc --version` works on both machines, connect from the **laptop**:
 hc machine add your-user@your-server
 hc machine ls
 ```
+
+Use the same SSH destination that worked in your shell. If this fails, resolve
+SSH authentication or the remote `hc` installation/PATH first. The command adds
+a machine connection, not a Git repository or a conversation. Adding a host
+does not copy your laptop's project files there.
 
 You can also add the server in Herdr desktop. On the first desktop installation,
 Bollard automatically selects **studio-work-portrait** in the open primary Herdr
@@ -129,6 +154,42 @@ Selecting a layout does not create or restart agents. The flag targets the
 primary desktop window; it does not replace custom per-stream windows.
 Pick your own streams; the public layout ships without somebody else's terminal
 IDs. `laptop` and `jumpbox` remain aliases for `all` and `tui`.
+
+## Open your first project and stream
+
+1. On the **agent machine**, clone your actual project repository (or use an
+   existing checkout). It must have at least one commit. For a new local project,
+   initialize Git and make an initial commit before opening a stream.
+2. In that checkout, check `git status --short --branch`, `git config user.name`
+   and `git config user.email`. Configure your own commit identity if missing.
+   Confirm the selected agent is installed and signed in there using the
+   [agent guide](agents.md). No paid conversation is needed just to install Bollard.
+3. In Herdr, click **Choose a stream → New conversation**, select the machine,
+   and choose the repository. On a fresh install there may be no suggestions:
+   use **Choose another repository** (or the repository path field) and enter
+   its absolute path **on that machine**. Do not enter a GitHub URL or the
+   laptop's path for a remote project.
+4. Start with **Studio** for a planning conversation without Docker. Choose
+   **New stream**, the project's default branch, a name such as `first-plan`,
+   and your signed-in agent. Submit once and watch the opening progress.
+   The repository gets a separate worktree, `docs/` guidance, a handoff folder
+   and ignored `scratch/`; you should see the agent confirm its role and branch.
+5. To return, use **Existing conversation**. It attaches to that conversation;
+   it should not create another worktree or another agent. The second layout
+   slot may stay empty until you choose another stream.
+
+The TUI uses the same **Change stream / New conversation** picker. Start it
+with `repo-tui` on the laptop or over SSH on the server. The shell shortcut
+below is optional. A new checkout can start from a local committed `main`
+through the picker; a fetched remote branch needs working Git credentials.
+
+For **Work**, first prepare the implementation handoff when coming from Studio,
+and ensure the development host has a working Docker engine/Compose and the
+project's required configuration and environment files. Follow the
+[daily workflow](workflow.md) before starting the coding role. Work is not a
+Docker-free installation smoke test. A remote connection, an agent login, and
+Git remote authentication are separate checks; one succeeding does not prove
+the other two are ready.
 
 ## Make plain `herdr` open Bollard
 

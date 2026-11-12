@@ -58,6 +58,7 @@ brew install node@22             # development checks only
 export PATH="$(brew --prefix node@22)/bin:$PATH"
 python3 desktop_build.py          # regenerate packaged helpers
 python3 tests/run.py
+python3 tests/clean_install.py    # disposable walkthrough; no real agents or SSH
 python3 tests/check_sources.py
 node --test tests/js/*.test.mjs
 herdr-app check herdr/mods/repo-portrait  # if this mod changed
@@ -70,6 +71,15 @@ Review-worker tests run harmless local Python checks and substitute the model bo
 They verify allowance reservation before launch, source freshness and failure paths.
 Native Herdr checks test loading/rendering; deferred UI actions still need
 interaction checks. One green command doesn't cover the whole application.
+
+The clean-install smoke test clones the source into a temporary directory,
+installs with an empty HOME, runs the documented checklist and shell shortcut,
+prepares a real Git worktree and handoff, and checks that reopening does not
+duplicate the conversation. It also checks default layout selection and update
+preservation. Herdr, machine connection and agent execution are explicit test
+substitutes. It does not prove Homebrew downloads, a real SSH login, provider
+authentication, desktop clicks or Docker startup; never describe it as a full
+live onboarding test. All temporary files are removed afterward.
 
 ## Shared desktop code
 
