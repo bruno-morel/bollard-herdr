@@ -5,12 +5,11 @@ import { scopedLocation, scopedRequest } from './scope.js';
 // Uses Herdr's native Markdown and source viewers; no terminal replaces the conversation.
 import { View, div } from 'gpui-kit';
 import { v_flex, h_flex, TextView, Editor, EditorState, Input, InputState, v_virtual_list, Scrollbar, VirtualListScrollHandle } from 'gpui-base';
-import { terminals, spaces, panes, focused, exec, hc, theme, settings, nextCommand, props, shared, setShared } from 'herdr';
+import { terminals, spaces, panes, focused, hc, theme, settings, nextCommand, props, shared, setShared } from 'herdr';
 import { selectRequest, selectLocation, machineOf } from './routing.js';
 import { parseFiles, fileChoices, browseRows, ancestors } from './files.js';
 const LANG = { ts: 'js', tsx: 'js', jsx: 'js', mjs: 'js', toml: 'yaml', yml: 'yaml', py: 'python', sh: 'bash', zsh: 'bash' };
-const location = () => scopedLocation();
-const requested = () => scopedRequest();
+import {exec, location, requested, workflowAvailable} from './panel-host.js';
 const GIT = ['--no-optional-locks', '-c', 'core.fsmonitor=false'];
 
 export default class RepoReader extends View {
@@ -25,7 +24,7 @@ export default class RepoReader extends View {
     this.input.on('submit', (_e,cx) => { const row = this.choices().rows.find(f => !f.deleted); if (row) this.pick(row.path,cx); });
     cx.timer.every(10000, cx => this.refreshFiles(cx));
     // Also available to Herdr's command palette/key bindings; never sends agent keystrokes.
-    cx.spawn(async cx => { for (;;) {
+    if(workflowAvailable()) cx.spawn(async cx => { for (;;) {
       const command = await nextCommand();
       if (command === 'files') this.showFiles = !this.showFiles;
       if (command === 'all') { this.forceAll = !this.forceAll; this.scroll.scroll_to_item(0); }
@@ -186,7 +185,7 @@ export default class RepoReader extends View {
       .child(h_flex().h(40).flex_none().px(12).gap(4).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child(this.mode==='docs'?'Docs':'Files'))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(eligible))
-        .when(this.text!==null,e=>e.child(control('reader-helper','Ask a helper',()=>this.askHelper(),{icon:'agents'})))
+        .when(workflowAvailable()&&this.text!==null,e=>e.child(control('reader-helper','Ask a helper',()=>this.askHelper(),{icon:'agents'})))
         .child(this.button('read-files-toggle',this.showFiles?'Hide list':'File list',(_e,cx)=>{this.showFiles=!this.showFiles;cx.notify();}))
         .when(this.text!==null&&this.markdown&&!this.editing,e=>e.child(this.button('read-mode',this.source?'Preview':'Source',(_e,cx)=>{this.source=!this.source;cx.notify();})))
         .when(this.text!==null&&!this.editing,e=>e.child(this.button('read-edit',this.drafts.has(this.draftKey())?'Restore edit':'Edit',(_e,cx)=>this.edit(cx))))

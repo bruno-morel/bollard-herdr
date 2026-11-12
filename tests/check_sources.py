@@ -64,6 +64,7 @@ def check(path):
 def main():
     root = Path(__file__).resolve().parents[1]
     sp.run([sys.executable, str(root / "desktop_build.py"), "--check"], check=True)
+    sp.run([sys.executable, str(root / "standalone_build.py"), "--check"], check=True)
     paths = list(sources(root))
     for path in paths:
         check(path)

@@ -1,0 +1,28 @@
+// Standalone adapter: plain repositories need no Bollard workflow installation.
+import {exec as hostExec, props, terminals, spaces, panes, focused} from 'herdr';
+import {selectLocation, selectRequest, machineOf} from './routing.js';
+export function location(){
+ const pinned=props()?.context;
+ const c=pinned?.cwd?{...pinned,on:pinned.on??null,key:JSON.stringify([pinned.on??null,pinned.cwd])}:selectLocation(terminals(),spaces(),panes(),focused());
+ if(!c)return null;
+ const rows=terminals().filter(t=>machineOf(t.address)===c.on&&(t.labels?.['repo-tools.checkout']||t.cwd)===c.cwd&&t.labels?.['repo-tools.stream']);
+ const stream=pinned?.stream||rows[0]?.labels?.['repo-tools.stream'];
+ return {...c,stream,managed:!!stream};
+}
+export const requested=()=>props()?.context?null:selectRequest(terminals(),spaces(),panes(),focused());
+export const workflowAvailable=()=>false;
+export const panelVisible=()=>true;
+export const liveLogDescription='Docker logs · refresh 2s · bounded history';
+export function exec(command,args,options){
+ if(command==='repo-read')return hostExec('bollard-panel.py',['read',args[1]],options);
+ if(command==='repo-panel.py')return hostExec('bollard-panel.py',args,options);
+ // Keep isolated Compose identity when browsing an existing Bollard stream.
+ const stream=command==='work'?(args[0]==='observe'?args[1]:args[2]):command==='repo-logfeed.py'?args[1]:null;
+ if(stream)return hostExec(command,args,options);
+ if(command==='repo-logfeed.py')return hostExec('bollard-panel.py',['docker-logs'],options);
+ if(command==='work'){
+  const action=args[0]==='observe'?'docker-status':args[1]==='start'?'docker-start':'docker-startup';
+  return hostExec('bollard-panel.py',[action],options);
+ }
+ return hostExec(command,args,options);
+}

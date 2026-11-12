@@ -52,5 +52,10 @@
     "repo-review/routing.js",
     "repo-stream-picker/routing-core.js",
     "repo-workflow/routing-core.js"
+  ],
+  "panel-host.js": [
+    "repo-portrait/panel-host.js",
+    "repo-portrait-reader/panel-host.js",
+    "repo-portrait-changes/panel-host.js"
   ]
 }

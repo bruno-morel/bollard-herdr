@@ -4,11 +4,12 @@ import {askHelper} from './helper.js';
 import {button as control,toolColors} from './ui.js';
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings } from "herdr";
+import { spaces, panes, focused, readTextFile, watchFolder, theme, settings } from "herdr";
 
 import {scopedLocation} from './scope.js';
 import {props,shared,setShared,run,notify,openOverlay} from 'herdr';
-function location(){return scopedLocation()||{};}
+import {exec, location as hostLocation, workflowAvailable} from './panel-host.js';
+function location(){return hostLocation()||{};}
 const key = () => JSON.stringify(location());
 // Reads write nothing under .git (no index refresh or lock, no fsmonitor cookie):
 // the folder watch would see it, and every refresh would start the next one.
@@ -225,9 +226,9 @@ export default class Changes extends View {
         .child(div().text_size(11).text_color(t.muted).child(`${this.files.length} files`))
         .child(div().text_size(11).text_color(t.ansi2).child(`+${add}`)).child(div().text_size(11).text_color(t.ansi1).child(`−${del}`))
         .child(div().flex_1())
-        .child(control('changes-main','Update from main',()=>openOverlay({mod:'repo-sync',kind:'dialog',width:780,height:690,props:{context:location(),source:'default'}}),{icon:'refresh'}))
-        .child(control('changes-merge','Merge branch…',()=>openOverlay({mod:'repo-sync',kind:'dialog',width:780,height:690,props:{context:location()}}),{icon:'changes'}))
-        .when(key()===this.context&&!!this.open&&this.rows.length>0,e=>e.child(control('changes-helper','Ask a helper',()=>askHelper(location(),{pane:'changes',source:this.open,text:this.rows.map(r=>(['+','-',' '].includes(r.kind)?r.kind:'')+r.text).join('\n'),truncated:this.rows.length>=1500}),{icon:'agents'})))
+        .when(workflowAvailable(),e=>e.child(control('changes-main','Update from main',()=>openOverlay({mod:'repo-sync',kind:'dialog',width:780,height:690,props:{context:location(),source:'default'}}),{icon:'refresh'})))
+        .when(workflowAvailable(),e=>e.child(control('changes-merge','Merge branch…',()=>openOverlay({mod:'repo-sync',kind:'dialog',width:780,height:690,props:{context:location()}}),{icon:'changes'})))
+        .when(workflowAvailable()&&key()===this.context&&!!this.open&&this.rows.length>0,e=>e.child(control('changes-helper','Ask a helper',()=>askHelper(location(),{pane:'changes',source:this.open,text:this.rows.map(r=>(['+','-',' '].includes(r.kind)?r.kind:'')+r.text).join('\n'),truncated:this.rows.length>=1500}),{icon:'agents'})))
         .child(control('changes-list-toggle',this.showFiles?'Hide list':'File list',(_e,cx)=>{this.showFiles=!this.showFiles;cx.notify();},{icon:'folder'}))
         .child(control('changes-refresh','Refresh',(_e,cx)=>this.refresh(cx),{icon:'refresh',compact:true})))
       .child(h_flex().flex_none().p(10).gap(8).border_t(1).border_color(t.border)

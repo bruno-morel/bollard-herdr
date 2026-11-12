@@ -14,29 +14,7 @@ import tempfile
 BIN=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('panel_review',BIN/'repo-review.py');R=importlib.util.module_from_spec(spec);spec.loader.exec_module(R)
 
-def root():return Path(R.git('.', 'rev-parse','--show-toplevel')).resolve()
-def file_data(path):
-    r=root();p=R.safe(r,path)
-    if not p.is_file() or p.stat().st_size>100000:raise RuntimeError('Native editing supports text files up to 100 KB')
-    raw=p.read_bytes()
-    if b'\0' in raw:raise RuntimeError('Binary file; use a suitable external editor')
-    text=raw.decode('utf-8')
-    return dict(root=str(r),path=path,text=text,digest=hashlib.sha256(raw).hexdigest())
-def save(path,digest,text):
-    if not re.fullmatch('[0-9a-f]{64}',digest):raise RuntimeError('Missing original file revision')
-    if '\0' in text or len(text.encode())>100000:raise RuntimeError('Text exceeds the 100 KB editor limit')
-    r=root();p=R.safe(r,path);before=file_data(path)
-    if before['digest']!=digest:raise RuntimeError('File changed on disk. Your edit is retained; compare it before reloading. Nothing was overwritten.')
-    mode=stat.S_IMODE(p.stat().st_mode)
-    fd,tmp=tempfile.mkstemp(prefix='.'+p.name+'.edit-',dir=p.parent)
-    try:
-        with os.fdopen(fd,'w',encoding='utf-8',newline='') as f:f.write(text);f.flush();os.fsync(f.fileno())
-        os.chmod(tmp,mode)
-        if file_data(path)['digest']!=digest:raise RuntimeError('File changed while saving. Nothing was overwritten.')
-        os.replace(tmp,p)
-    finally:
-        if os.path.exists(tmp):os.unlink(tmp)
-    return file_data(path)
+from repo_file_io import root, file_data, save
 
 def terminal(address):
     if not re.fullmatch(r't[0-9a-z]+',address):raise RuntimeError('Expected a local terminal ID')

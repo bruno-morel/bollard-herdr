@@ -63,6 +63,7 @@ In a terminal, run `repo-tui`. No agent starts just because you installed a UI.
 | --- | --- |
 | Connect laptop, server or phone | [Setup](docs/setup.md) |
 | Install/sign in to Codex, Claude or Cursor | [Agent guide](docs/agents.md) |
+| Use the file browser or Docker panel in another layout | [Standalone mods](docs/standalone-mods.md) |
 | Create custom roles and hand off between them | [Role profiles](docs/roles.md) |
 | Plan → code → test → review | [Daily workflow](docs/workflow.md) |
 | Change Bollard itself | [Development](docs/development.md) |

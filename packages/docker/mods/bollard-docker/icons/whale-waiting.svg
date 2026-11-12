@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="240" viewBox="0 0 360 240" fill="none">
+  <ellipse cx="178" cy="215" rx="114" ry="10" fill="#849a9c" opacity=".12"/>
+  <path d="M251 134c15-1 19-14 19-27-14 6-21 5-30-1 0 16 5 24 11 28Z" fill="#83b9b6" stroke="#4e858c" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M238 160c24-2 39-17 43-38 11 1 23-6 28-16-18-8-32-4-40 3-3-16-16-24-31-23-3 18 5 33 17 39-2 10-10 18-21 19" fill="#83b9b6" stroke="#4e858c" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M58 150c0-40 31-69 77-69 43 0 70 22 91 49 9 11 20 15 30 11-3 35-32 61-85 64-61 4-113-14-113-55Z" fill="#8cbfbb" stroke="#4e858c" stroke-width="3"/>
+  <path d="M63 167c15 26 57 38 108 35 40-2 65-17 76-37-29 20-58 12-85 14-39 3-71 9-99-12Z" fill="#d4e5d8"/>
+  <path d="M172 161c4 17 15 28 31 25-2-12-8-23-19-29" fill="#6aa7a7" stroke="#4e858c" stroke-width="3" stroke-linecap="round"/>
+  <path d="M80 139c5 5 11 5 16 0" stroke="#355d67" stroke-width="3" stroke-linecap="round"/>
+  <path d="m78 130 8-4" stroke="#4e858c" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M121 139c5 5 11 5 16 0" stroke="#355d67" stroke-width="3" stroke-linecap="round"/>
+  <path d="m132 126 8 4" stroke="#4e858c" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M102 165c5-5 10-5 15 0" stroke="#355d67" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="76" cy="155" rx="7" ry="4" fill="#d8949a" opacity=".55"/>
+  <ellipse cx="142" cy="155" rx="7" ry="4" fill="#d8949a" opacity=".55"/>
+  <path d="M91 146c0 0-6 9-6 13a6 6 0 0 0 12 0c0-4-6-13-6-13Z" fill="#91c7e1" stroke="#659bb7" stroke-width="1.5"/>
+  <path d="M128 150c0 0-5 8-5 11a5 5 0 0 0 10 0c0-3-5-11-5-11Z" fill="#91c7e1" stroke="#659bb7" stroke-width="1.5"/>
+  <path d="M125 79c-1-16-8-26-19-26M126 78c2-22 12-32 23-27" stroke="#8ebbbf" stroke-width="5" stroke-linecap="round"/>
+  <path d="M100 47c0 0-5-8-5-12a5 5 0 0 1 10 0c0 4-5 12-5 12ZM155 47c0 0-5-8-5-12a5 5 0 0 1 10 0c0 4-5 12-5 12Z" fill="#b0d1d1"/>
+  <path d="M45 206c6-4 11-4 17 0M279 200c6-4 11-4 17 0M233 221c6-4 11-4 17 0" stroke="#9db9b8" stroke-width="2" stroke-linecap="round"/>
+</svg>

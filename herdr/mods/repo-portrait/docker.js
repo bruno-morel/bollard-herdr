@@ -4,8 +4,8 @@ import {dockerState,emptyCopy} from './docker-state.js';
 import { View,div,image } from 'gpui-kit';
 import { v_flex,h_flex,VirtualListScrollHandle } from 'gpui-base';
 import {logView,logText} from './log-view.js';
-import { exec,theme,settings,shared,props,notify } from 'herdr';
-import { scopedLocation,VIEWS } from './scope.js';
+import { theme,settings,shared,props,notify } from 'herdr';
+import {exec,location as scopedLocation,panelVisible,workflowAvailable,liveLogDescription} from './panel-host.js';
 import {toolColors,button} from './ui.js';
 // Shorten only Compose's line prefix; leave the actual log message intact.
 export function displayLogs(data){
@@ -20,7 +20,7 @@ export function displayLogs(data){
 export default class Docker extends View {
  init(_p,cx){this.busy=false;this.generation=0;this.startRequests=new Set();this.job=null;this.showStartup=false;this.startError='';this.error='';this.data=null;this.key=null;this.frozen=false;this.showOldLogs=false;this.showDetails=false;this.log='';this.follow=true;this.feedBusy=false;this.feedError='';this.logScroll=VirtualListScrollHandle.new();cx.timer.every(2000,cx=>this.pollLogs(cx));cx.timer.every(10000,cx=>this.refresh(cx));}
  setLog(value){const next=logText(value);if(next===this.log)return;this.log=next;if(this.follow)this.logScroll.scroll_to_bottom();}
- pollLogs(cx){const c=scopedLocation();if(!c||this.feedBusy||this.frozen||this.showStartup||this.job?.state==='running'||(shared(VIEWS)||{})[props()?.lane]!=='docker'||dockerState(this.data)!=='active')return;
+ pollLogs(cx){const c=scopedLocation();if(!c||this.feedBusy||this.frozen||this.showStartup||this.job?.state==='running'||!panelVisible('docker')||dockerState(this.data)!=='active')return;
   this.feedBusy=true;const generation=this.generation;cx.spawn(async cx=>{try{const r=await exec('repo-logfeed.py',['poll',c.stream],{cwd:c.cwd,on:c.on});if(generation!==this.generation)return;if(r.code)throw new Error(r.stderr||r.stdout);const d=JSON.parse(r.stdout);this.feedError=d.state==='error'?d.message:'';if(d.logs){this.data={...this.data,logs:d.logs,observed_at:new Date(d.heartbeat*1000).toISOString()};this.setLog(displayLogs(this.data));}}catch(e){if(generation===this.generation)this.feedError=String(e);}finally{this.feedBusy=false;cx.notify();}});
  }
  askHelper(){const c=scopedLocation();if(this.key===c?.key&&this.data?.logs)askHelper(c,{pane:'docker',source:this.data.project||'Compose logs',text:displayLogs(this.data),observed_at:this.data.observed_at});}
@@ -37,7 +37,7 @@ export default class Docker extends View {
   }catch(e){if(scopedLocation()?.key===c.key){this.startError=String(e);this.showStartup=false;}}
   finally{this.startRequests.delete(c.key);if(scopedLocation()?.key===c.key){this.refresh(cx,true);cx.notify();}}});
  }
- refresh(cx,force=false){const c=scopedLocation();if(!c||this.busy||this.startRequests.has(c.key)||(!force&&(this.frozen||(shared(VIEWS)||{})[props()?.lane]!=='docker')))return;
+ refresh(cx,force=false){const c=scopedLocation();if(!c||this.busy||this.startRequests.has(c.key)||(!force&&(this.frozen||!panelVisible('docker'))))return;
   this.busy=true;const key=c.key,g=this.generation;
   const current=()=>scopedLocation()?.key===key&&g===this.generation;
   cx.spawn(async cx=>{try{
@@ -77,7 +77,7 @@ export default class Docker extends View {
     .child(div().flex_1().text_size(12).font_semibold().child(this.data?.project||'Docker logs'))
     .when(!starting&&!!this.job?.terminal,e=>e.child(button('docker-start-output',this.showStartup?'Back to containers':'Startup output',(_e,cx)=>{this.showStartup=!this.showStartup;this.setLog(this.showStartup?this.job.output||'No startup output captured.':displayLogs(this.data||{}));cx.notify();},{icon:'list'})))
     .when(!starting&&empty&&!!this.data?.logs,e=>e.child(button('docker-history',this.showOldLogs?'Back to overview':'View last logs',(_e,cx)=>{this.showOldLogs=!this.showOldLogs;this.showStartup=false;this.setLog(displayLogs(this.data));cx.notify();},{icon:this.showOldLogs?'docker':'list'})))
-    .when(!!this.data?.logs,e=>e.child(button('docker-helper','Ask a helper',()=>this.askHelper(),{icon:'agents'})))
+    .when(workflowAvailable()&&!!this.data?.logs,e=>e.child(button('docker-helper','Ask a helper',()=>this.askHelper(),{icon:'agents'})))
     .child(button('docker-latest',this.follow?'Following':'Latest',(_e,cx)=>{this.follow=true;this.logScroll.scroll_to_bottom();cx.notify();},{icon:'play',selected:this.follow}))
     .child(button('docker-copy','Copy logs',(_e,cx)=>cx.write_to_clipboard(this.log),{icon:'copy'}))
     .child(button('docker-freeze',this.frozen?'Resume refresh':'Freeze',(_e,cx)=>{this.frozen=!this.frozen;if(!this.frozen)this.refresh(cx,true);cx.notify();},{icon:this.frozen?'play':'pause'}))
@@ -96,7 +96,7 @@ export default class Docker extends View {
    .when(!this.error&&!starting&&!this.showStartup&&empty&&!this.showOldLogs,el=>el.child(this.empty(state,t)))
    .when(!this.error&&!starting&&!this.showStartup&&(state==='loading'||state==='unknown'),el=>el.child(div().flex_1().p(20).text_size(12).text_color(t.muted).child(state==='unknown'?'Docker status is unavailable. Refresh to try again.':c?'Checking this stream’s containers…':'Choose a stream to see its containers.')))
    .when((starting||this.showStartup)||(!this.error&&(state==='active'||(empty&&this.showOldLogs))),el=>el.child(logView('docker-logs-'+this.key,this.log||'Waiting for container output…',this)))
-   .child(div().flex_none().px(10).py(3).text_size(10).text_color(t.dim).child(starting?'Docker startup continues in the background · refresh 10s':this.busy?'Refreshing…':this.frozen?'Display frozen · agent and containers continue':empty?'Checks every 10s':this.error?'Inspection unavailable · retry every 10s':this.feedError?'Log stream needs attention: '+this.feedError:'Live Docker log follower · bounded history'+(this.follow?' · following latest':' · scroll paused')));
+   .child(div().flex_none().px(10).py(3).text_size(10).text_color(t.dim).child(starting?'Docker startup continues in the background · refresh 10s':this.busy?'Refreshing…':this.frozen?'Display frozen · agent and containers continue':empty?'Checks every 10s':this.error?'Inspection unavailable · retry every 10s':this.feedError?'Log stream needs attention: '+this.feedError:liveLogDescription+(this.follow?' · following latest':' · scroll paused')));
  }
  close(){this.logScroll.release();}
 }
