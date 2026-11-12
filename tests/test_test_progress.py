@@ -29,3 +29,7 @@ class Progress(unittest.TestCase):
     def test_timeout_is_incomplete_not_passed(self):
         v=view(self.data(results=[{'exit_code':-1}]))
         self.assertEqual((v['passed'],v['failed'],v['incomplete']),(0,0,1))
+
+    def test_active_check_is_running_not_unrun(self):
+        v=view(self.data(state='running',current='active',results=[]))
+        self.assertEqual((v['running'],v['unrun']),(1,2))

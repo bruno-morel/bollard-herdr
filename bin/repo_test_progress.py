@@ -29,7 +29,8 @@ def view(s, progress=None):
     passed=sum(x.get('exit_code')==0 for x in rows)
     failed=sum(x.get('exit_code') not in (0,None,-1) for x in rows)
     incomplete=sum(x.get('exit_code') in (None,-1) for x in rows)
-    unrun=max(0,len(s.get('checks') or [])-len(rows))
+    running=int(s.get('state')=='running' and bool(s.get('current')) and not any(x.get('id')==s['current'] for x in rows))
+    unrun=max(0,len(s.get('checks') or [])-len(rows)-running)
     state=s.get('state'); old=bool(job.get('run') and job['run']==s.get('token'))
     phase=job.get('state'); detail=job.get('message','')
     if progress.get('run') in (job.get('run'),s.get('token')) and progress.get('run') and phase in ('sent','uncertain',None):
@@ -54,7 +55,8 @@ def view(s, progress=None):
     else:label='Not run';phase='not-run';tone='muted'
     historical=state=='stale' or (old and bool(phase))
     counts=f'{passed} passed · {failed} failed · {incomplete} incomplete · {unrun} unrun'
+    if running:counts+=f' · {running} running'
     return dict(phase=phase,label=label,tone=tone,active=active,
         counts=counts,historical=historical,
         summary=('Previous run: ' if historical else '')+counts,
-        detail=detail,passed=passed,failed=failed,incomplete=incomplete,unrun=unrun)
+        detail=detail,passed=passed,failed=failed,incomplete=incomplete,unrun=unrun,running=running)
