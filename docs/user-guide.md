@@ -70,7 +70,8 @@ The attention indicator appears before the window controls. Ordinary idle agents
 are not counted, and the same terminal in multiple views is counted once. Helpers
 route to their stream’s window. If no matching window is open, a message asks you
 to select the conversation with the stream picker. No preview or new window is opened. Window activation
-is supported on macOS; navigation does not consume model allowance.
+targets the exact app instance on macOS and verifies that it came to the front;
+navigation does not consume model allowance.
 
 The toolbar groups related tools: **Conversation / Questions**, **Docs / Files /
 Git**, and **Tests / Review**. A group's title follows the selected tool. **Actions**

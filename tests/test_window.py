@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import window_helper as W
 
 class Windows(unittest.TestCase):
@@ -70,3 +70,21 @@ class Windows(unittest.TestCase):
         with patch.object(W,'agent_windows',return_value=[]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'Popen') as spawn:
             self.assertFalse(W.focus_agent(Path('/app'),{'terminal':'box/t2'})['found'])
             spawn.assert_not_called()
+
+    def test_raise_process_targets_pid_and_verifies_foreground(self):
+        service=Mock()
+        service.GetProcessForPID.return_value=0
+        service.SetFrontProcessWithOptions.return_value=0
+        with patch.object(W.ctypes,'CDLL',return_value=service),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0,stdout='focused\n')) as run:
+            W.raise_process(12345)
+        self.assertEqual(service.GetProcessForPID.call_args.args[0],12345)
+        self.assertEqual(service.SetFrontProcessWithOptions.call_args.args[1],1)
+        self.assertEqual(run.call_args.args[0][-1],'12345')
+
+    def test_raise_process_rejects_false_activation_success(self):
+        service=Mock()
+        service.GetProcessForPID.return_value=0
+        service.SetFrontProcessWithOptions.return_value=0
+        with patch.object(W.ctypes,'CDLL',return_value=service),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=1,stdout='',stderr='Window stayed behind')):
+            with self.assertRaisesRegex(RuntimeError,'Window stayed behind'):
+                W.raise_process(12345)

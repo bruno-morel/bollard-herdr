@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Open an independent Herdr window on the same core; never launch an agent."""
-import argparse,copy,fcntl,hashlib,json,os,re,shutil,subprocess as sp,sys,time
+import argparse,copy,ctypes,fcntl,hashlib,json,os,re,shutil,subprocess as sp,sys,time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -160,9 +160,30 @@ def activate_window(home):
  result=sp.run(['/usr/sbin/lsof','-t','-a','-U',str(home/'herdr-app.sock')],capture_output=True,text=True,timeout=3)
  pids=list(dict.fromkeys(x for x in result.stdout.split() if x.isdigit()))
  if len(pids)!=1:raise RuntimeError('Could not identify the window process; no other window was activated.')
- script='ObjC.import("AppKit"); function run(args) { var app=$.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(args[0])); if (!app || !app.activateWithOptions(3)) throw Error("Could not activate Herdr window"); }'
- result=sp.run(['/usr/bin/osascript','-l','JavaScript','-e',script,pids[0]],capture_output=True,text=True,timeout=5)
- if result.returncode:raise RuntimeError(result.stderr.strip() or 'Could not activate the existing window.')
+ raise_process(int(pids[0]))
+
+
+def raise_process(pid):
+ # NSRunningApplication.activate can return true without bringing independently
+ # launched Herdr instances forward. Target the process serial number instead.
+ class ProcessSerialNumber(ctypes.Structure):
+  _fields_=[('high',ctypes.c_uint32),('low',ctypes.c_uint32)]
+ services=ctypes.CDLL('/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
+ services.GetProcessForPID.argtypes=[ctypes.c_int32,ctypes.POINTER(ProcessSerialNumber)]
+ services.GetProcessForPID.restype=ctypes.c_int32
+ services.SetFrontProcessWithOptions.argtypes=[ctypes.POINTER(ProcessSerialNumber),ctypes.c_uint32]
+ services.SetFrontProcessWithOptions.restype=ctypes.c_int32
+ serial=ProcessSerialNumber()
+ if services.GetProcessForPID(pid,ctypes.byref(serial))!=0:
+  raise RuntimeError('The Herdr window process is no longer available.')
+ if services.SetFrontProcessWithOptions(ctypes.byref(serial),1)!=0:
+  raise RuntimeError('macOS could not bring this Herdr instance forward.')
+ # Verify the visible result, not just the activation API's return value.
+ script='ObjC.import("AppKit"); function run(args) { for (var i=0;i<10;i++) { if (Number($.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier)===Number(args[0])) return "focused"; delay(0.1); } throw Error("The requested Herdr window did not come to the front. Please select it from the Dock."); }'
+ result=sp.run(['/usr/bin/osascript','-l','JavaScript','-e',script,str(pid)],capture_output=True,text=True,timeout=4)
+ if result.returncode or result.stdout.strip()!='focused':
+  raise RuntimeError(result.stderr.strip() or 'Could not verify the Herdr window came to the front.')
+
 
 
 def focus_agent(source,context):
