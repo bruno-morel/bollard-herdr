@@ -83,7 +83,7 @@ export default class Tests extends View {
     .child(button('tests-primary',action.label,(_e,cx)=>{if(!action.disabled)this.action(action.action,cx);},{icon:action.icon||'test',strong:true}).opacity(action.disabled ? 0.55 : 1))
     .when(!!s?.configured,e=>e.child(button('tests-commands',this.showCommands?'Hide commands':'Show commands',(_e,cx)=>{this.showCommands=!this.showCommands;cx.notify();},{icon:'list',selected:this.showCommands})))
     .when(!!s?.setup_terminal,e=>e.child(button('tests-child','Open test helper',()=>run('terminal.peek',{terminal:(c.on?c.on+'/':'')+s.setup_terminal}),{icon:'agents'})))
-    .when(!!s?.failure_prompt,e=>e.child(button('tests-send','Send failures to conversation',(_e,cx)=>this.action('send',cx),{icon:'message'})))
+    .when(!!s?.failure_prompt,e=>e.child(button('tests-send',s.state==='stale'?'Discuss old failures':'Investigate failures',(_e,cx)=>this.action('send',cx),{icon:'message'})))
     .when(this.logOpen&&!!this.chosen,e=>e.child(button('tests-helper','Ask a helper',()=>askHelper(c,{pane:'tests',source:this.chosen,text:'Run: '+(s.token||'unknown')+' · evidence '+s.state+'\n\n'+this.editor.value(),head:s.head,observed_at:s.finished||s.started}),{icon:'agents'})))
     .child(button('tests-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
    .when(!!this.error||!!this.actionError,e=>e.child(div().px(12).text_size(12).text_color(t.blocked).child(this.actionError||this.error)))
@@ -98,6 +98,8 @@ export default class Tests extends View {
     .when(!!s.config_error,e=>e.child(div().mt(4).text_size(11).text_color(t.muted).child(s.config_error)))))
    .when(!missing,e=>e
     .child(div().px(12).child(caption(s?.message||'Runs the saved checks. No model usage for reruns.')))
+    .when(s?.state==='stale',e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('Historical results — not the current checkout. Tests run directly by an agent are not automatically imported here.')))
+    .when(!!s?.failure_prompt,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child('This runner reports failures; it does not edit code. Investigate failures sends evidence to your lead when idle; Ask a helper provides read-only analysis. Implement → Review is the separate bounded fix/review workflow.')))
     .when(!!s?.checks,e=>e.child(div().px(12).text_size(11).text_color(t.muted).child(s.checks.length+' configured checks · Up to '+Math.ceil(s.checks.reduce((n,x)=>n+(x.timeout||120),0)/60)+' minutes'+(s.current?' · Running '+s.current:''))))
     .when(!!s?.setup_summary,e=>e.child(div().px(12).text_size(12).text_color(t.muted).child(s.setup_summary+' · '+s.setup_limitations)))
     .when(this.showCommands,e=>e.child(v_flex().id('tests-commands-list').max_h(140).flex_none().overflow_y_scrollbar().px(12).py(5).gap(5)

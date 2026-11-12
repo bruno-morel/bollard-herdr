@@ -340,3 +340,20 @@ an existing stream, use **Hand off to… → Work** rather than deleting it.
 New conversations show prominent **Studio · Plan** and **Work · Implement**
 choices; configured custom roles appear in the same switch, without a second
 role dropdown.
+
+### Published Docker ports and test freshness
+
+The Docker log panel shows large published-port badges with the service and
+container port beside them. Copy the host address, or copy a web URL when the
+protocol is declared or suggested by a common web port. Suggested URLs are
+labelled; the panel does not probe the service. Remote addresses use the Docker
+host, not the laptop. Remote loopback bindings need an SSH tunnel and do not
+get a misleading clickable web URL. Database and UDP ports remain plain addresses.
+
+**Stale** test rows describe historical commands, not current code. Their original
+outcomes and logs remain available. Tests invoked directly in an agent conversation
+are not automatically imported into the Tests pane. The standalone runner only
+runs saved checks; it never fixes application code automatically. **Investigate
+failures** sends evidence to an idle lead for diagnosis; **Ask a helper** performs
+read-only analysis. **Implement → Review** is the separate bounded implementation
+and review flow, with the existing reviewer allowance.

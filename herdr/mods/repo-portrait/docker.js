@@ -1,3 +1,4 @@
+import {publishedPorts} from './docker-ports.js';
 import {reportPanel} from './signals.js';
 import {askHelper} from './helper.js';
 import {dockerState,emptyCopy} from './docker-state.js';
@@ -82,6 +83,13 @@ export default class Docker extends View {
     .child(button('docker-copy','Copy logs',(_e,cx)=>cx.write_to_clipboard(this.log),{icon:'copy'}))
     .child(button('docker-freeze',this.frozen?'Resume refresh':'Freeze',(_e,cx)=>{this.frozen=!this.frozen;if(!this.frozen)this.refresh(cx,true);cx.notify();},{icon:this.frozen?'play':'pause'}))
     .child(button('docker-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
+   .when(!this.showStartup&&publishedPorts(this.data?.services,c?.on).length>0,e=>e.child(
+    v_flex().id('docker-published-ports').max_h(140).flex_none().overflow_y_scrollbar().px(12).py(6).gap(5)
+     .children(publishedPorts(this.data?.services,c?.on).map(p=>h_flex().gap(8).items_center().flex_wrap()
+      .child(div().px(10).py(5).rounded(7).bg(t.selected).text_color(t.foreground).text_size(19).font_semibold().tooltip(p.note).child(':'+p.port))
+      .child(div().flex_1().text_size(11).text_color(t.muted).child(p.name+' · '+p.target+'/'+p.protocol))
+      .when(!!p.address,r=>r.child(button('address-'+p.key,'Copy address',(_e,cx)=>{cx.write_to_clipboard(p.address);notify({title:'Address copied',body:p.address});},{icon:'copy',compact:true}).tooltip(p.address+' · '+p.note)))
+      .when(!!p.url,r=>r.child(button('url-'+p.key,p.suggested?'Copy suggested URL':'Copy URL',(_e,cx)=>{cx.write_to_clipboard(p.url);notify({title:'URL copied',body:p.url});},{icon:'external'}).tooltip(p.url+' · '+(p.suggested?'HTTP/HTTPS inferred from container port; not probed. ':'')+p.note)))))))
    .when(starting,e=>e.child(div().px(14).py(8).text_size(13).font_semibold().child('Starting Docker… this can take a few minutes.')))
    .when(!starting&&(this.job?.state==='failed'||!!this.startError),e=>e.child(h_flex().px(14).py(7).gap(8).items_center()
     .child(div().flex_1().text_size(12).text_color(t.muted).child(this.startError||'The last startup did not finish successfully. Its output is available above.'))
