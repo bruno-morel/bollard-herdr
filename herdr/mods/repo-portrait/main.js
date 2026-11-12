@@ -1,4 +1,4 @@
-import {attentionRows,focusAttention} from './attention.js';
+import {attentionRows,focusAttention,requestAttention} from './attention.js';
 import {
   operation,
   stepText,
@@ -207,6 +207,11 @@ export default class Portrait extends View {
           }
           if (/^window-[a-z0-9-]+$/.test(cmd)) {
             this.openWindow(cmd.slice(7), cx);
+            continue;
+          }
+          if (cmd.startsWith('attention-open:')) {
+            const row=JSON.parse(decodeURIComponent(cmd.slice(15)));
+            cx.spawn(async cx => { await focusAttention(row); cx.notify(); });
             continue;
           }
           if (cmd.startsWith('attention-focus:')) {
@@ -524,7 +529,7 @@ export default class Portrait extends View {
       return v_flex().p(10).gap(5).bg(t.background).text_color(t.foreground)
         .child(div().px(8).py(4).font_semibold().child(waiting.length+' agents need you'))
         .children(waiting.map(row=>control('attention-'+row.address,row.display+' · '+row.reason,()=>{
-          closeOverlay();focusAttention(row);
+          requestAttention(row,p.overlay);
         },{icon:'message',tone:row.reason==='Waiting for input'?'attention':'ready'})))
         .when(!waiting.length,e=>e.child(div().px(8).py(6).text_color(t.muted).child('All caught up')));
     }
@@ -534,7 +539,7 @@ export default class Portrait extends View {
       return h_flex().size_full().pl(85).pr(10).gap(8).items_center().bg(t.chrome)
         .child(div().flex_1().text_size(13).font_semibold().text_color(t.foreground).child(this.error || p.windowTitle || 'Studio / Work · Portrait'))
         .child(control('portrait-attention',waiting.length ? waiting.length+' agent'+(waiting.length===1?' needs':'s need')+' you' : 'All caught up',()=>{
-          if(waiting.length===1)focusAttention(waiting[0]);
+          if(waiting.length===1)requestAttention(waiting[0]);
           else openOverlay({mod:'repo-portrait',kind:'popup',width:430,props:{kind:'attention'}});
         },{icon:'message',tone:waiting.length?'attention':null}).rounded(4))
         .child(control('portrait-sidebar', 'Spaces & agents', () => run('layout.toggle', {

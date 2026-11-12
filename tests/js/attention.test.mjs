@@ -24,3 +24,19 @@ test('missing window reports a message instead of opening a preview',async()=>{
  assert.equal(messages[0].title,'No open window for this agent');
  delete globalThis.__attentionMessages;
 });
+
+test('multi-agent selection queues the exact target before closing its own menu',async()=>{
+ const calls=[];globalThis.__attentionCalls=calls;
+ const prefix="const run=(...args)=>globalThis.__attentionCalls.push(['run',...args]);const closeOverlay=id=>globalThis.__attentionCalls.push(['close',id]);";
+ const mod=await import('data:text/javascript;base64,'+Buffer.from(prefix+src).toString('base64'));
+ const rows=[row('box/t1','blocked'),row('box/t2','blocked')];
+ const selected=mod.attentionRows(rows)[1];
+ mod.requestAttention(selected,'attention-popup');
+ assert.equal(calls[0][0],'run');
+ const payload=JSON.parse(decodeURIComponent(calls[0][1].split('attention-open:')[1]));
+ assert.equal(payload.context.terminal,'box/t2');
+ assert.deepEqual(calls[1],['close','attention-popup']);
+ calls.length=0;mod.requestAttention(selected);
+ assert.equal(calls.length,1);
+ delete globalThis.__attentionCalls;
+});
