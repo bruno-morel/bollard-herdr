@@ -29,3 +29,15 @@ test('file requests stay with the original checkout and select Docs only for tex
  assert.equal(f.api.scopedRequest(),null);
  for(const path of ['../secret','/secret','bad\0name'])assert.throws(()=>f.api.requestFile(c,path));
 });
+test('reader opens the requested JSON after resolving a differently cased Git root',()=>{
+ const source=readFileSync(new URL('../../herdr/mods/repo-portrait-reader/main.js',import.meta.url),'utf8');
+ const method=source.slice(source.indexOf('  openRequested(cx) {'),source.indexOf('  render(cx) {'));
+ const request={local:true,on:'remote',root:'/repo/stream',path:'docs/review-input.json',key:'ui:one'};
+ const view=new Function('requested','machineOf','return ({'+method+'});')(()=>request,()=> 'remote');
+ const opened=[];Object.assign(view,{mode:'files',context:{cwd:'/repo/stream',root:null,on:'remote'},seen:new Set(),load:(...args)=>opened.push(args)});
+ view.openRequested({});assert.equal(opened.length,0);assert.equal(view.seen.size,0);
+ view.context.root='/Repo/stream';view.openRequested({});assert.equal(opened.length,1);assert.equal(opened[0][0],request.path);
+ view.openRequested({});assert.equal(opened.length,1);
+ view.seen.clear();view.context.cwd='/other';view.openRequested({});assert.equal(opened.length,1);
+ view.context.cwd=request.root;view.mode='docs';view.openRequested({});assert.equal(opened.length,1);
+});

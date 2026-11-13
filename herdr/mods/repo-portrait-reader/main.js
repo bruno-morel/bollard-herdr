@@ -163,15 +163,19 @@ export default class RepoReader extends View {
           (this.context?.loading?'Loading files…':this.filter?'No matching files':this.context?'No files':'Select a repository stream')))))
       .when(Boolean(this.listError)&&rows.length>0,el=>el.child(div().px(12).py(5).text_size(12).text_color(t.blocked).child(this.listError)));
   }
+  openRequested(cx) {
+    if (!this.context?.root) return;
+    const request=requested();
+    if (request && (this.mode==='docs')===/\.(md|markdown|mdown|mkd|txt)$/i.test(request.path) && (request.local?this.context?.cwd===request.root:this.context?.root===request.root) && (request.local?this.context?.on===request.on:this.context?.on===machineOf(request.address)) && !this.seen.has(request.key)) {
+      this.seen.add(request.key); this.load(request.path,cx,request);
+    }
+  }
   render(cx) {
     this.sync(cx);
     reportPanel(this.mode==='docs'?'read':'files',this.context,this.error||this.listError);
     const draftKey=props()?.lane+':'+this.mode,unsaved=shared('repo.portrait.unsaved')||{},dirty=!!this.editing||this.drafts.size>0;
     if(unsaved[draftKey]!==dirty)setShared('repo.portrait.unsaved',{...unsaved,[draftKey]:dirty});
-    const request=requested();
-    if (request && (this.mode==='docs')===/\.(md|markdown|mdown|mkd|txt)$/i.test(request.path) && this.context?.root===request.root && (request.local?this.context?.on===request.on:this.context?.on===machineOf(request.address)) && !this.seen.has(request.key)) {
-      this.seen.add(request.key); this.load(request.path,cx,request);
-    }
+    this.openRequested(cx);
     const t=theme();
     let document=v_flex().h_full().flex_1().min_w(0).min_h(0).bg(t.background)
       .when(Boolean(this.path),e=>e.child(div().px(14).py(5).text_size(12).text_color(t.muted).truncate().child(this.path+(this.editing?' · unsaved edit':''))))
