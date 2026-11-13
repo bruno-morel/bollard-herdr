@@ -2,7 +2,9 @@
 
 Edit the tracked sources, then use install.py for deployment. Never modify
 runtime state to make a test pass. Preserve shared stream identity, agent
-conversation ownership, checkpoint retry semantics and Claude review limits.
+conversation ownership, checkpoint retry semantics and subscription-only review authentication. Reviews have no fixed call cap;
+keep per-call timeouts and the bounded automatic workflow loop. Never enable
+paid usage, auto-top-up or provider fallback.
 Keep credentials, private pins, machine addresses, terminal IDs and histories
 out of Git. Do not launch real agents or review calls as tests.
 

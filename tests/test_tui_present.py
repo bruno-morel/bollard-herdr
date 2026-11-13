@@ -49,14 +49,14 @@ class Presentation(unittest.TestCase):
                     {"provider": "cursor", "connected": False},
                 ]
             },
-            "review": {"remaining": 1},
+            "review": {"calls": 3},
         }
         before = copy.deepcopy(cache)
         text = self.text("usage", cache)
         self.assertIn("0% · Weekly", text)
         self.assertIn("Quota not reported", text)
         self.assertIn("Sign in on the agent", text)
-        self.assertIn("Review calls: 1 / 2", text)
+        self.assertIn("Review calls: 3 · subscription limits apply", text)
         self.assertEqual(cache, before)
 
     def test_context_does_not_invent_model_or_compaction_data(self):

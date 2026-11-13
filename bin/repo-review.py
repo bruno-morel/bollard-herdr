@@ -275,7 +275,7 @@ def snapshot_status(root,stream,runtime):
             if fingerprint(root,stream,load_config(root,stream))!=s['fingerprint']:
                 s=dict(s,state='stale',reason='This report predates the updated Git freshness checks; revalidate before relying on it.' if s['fingerprint'].get('algorithm')!='git-source-v2' else 'Source, tests, requirements or base branch changed since this review.')
         except (RuntimeError,OSError,ValueError) as e: s=dict(s,state='stale',reason=str(e))
-    s=dict(s,title=STATES.get(s['state'],s['state']),stream=stream,root=str(root),remaining=max(0,2-s.get('calls',0)))
+    s=dict(s,title=STATES.get(s['state'],s['state']),stream=stream,root=str(root),remaining=None,review_policy='subscription',automatic_review_limit=4)
     report=s.get('report')
     if report:
         p=safe(root,report)
@@ -287,9 +287,6 @@ def reserve(previous,follow,new_cycle):
     if new_cycle or not previous or not previous.get('cycle'):
         if follow: fail('a follow-up requires an initial review')
         return {'cycle':uuid.uuid4().hex[:12],'calls':0,'rounds':[]}
-    if previous.get('calls',0)==0: return previous
-    if not follow: fail('initial review already used; use --follow-up, or explicitly --new-cycle for a new allowance')
-    if previous.get('calls',0)>=2: fail('both review attempts are used; explicitly request --new-cycle for any more')
     return previous
 
 def process(argv,root,log,seconds,env=None,tick=None):
@@ -438,7 +435,7 @@ def worker(runtime,token):
                 evidence.append(e); state_set(runtime,s,checks=evidence)
             if fingerprint(root,stream,c)!=s['fingerprint']: fail('checks changed source files; reconcile changes and review again')
             if any(e['exit_code'] for e in evidence):
-                state='changes-required'; reason='Routine checks failed. Fix them before review; no allowance consumed.'
+                state='changes-required'; reason='Routine checks failed. Fix them before review; no model call used.'
             else:
                 env=auth() if reviewer=='claude' else review_env(reviewer)
                 if s.get('implemented_by'): independent(reviewer,s['implemented_by'])
@@ -469,7 +466,7 @@ def worker(runtime,token):
                     try: os.killpg(int(active.read_text()),signal.SIGKILL)
                     except (ProcessLookupError,ValueError): pass
                     active.unlink(missing_ok=True)
-                if rc: fail(reviewer+' stopped or reached a limit. This round is incomplete and consumed one review allowance.')
+                if rc: fail(reviewer+' stopped or reached a limit. This round is incomplete and is recorded as one review call.')
                 result=agents.structured_result(reviewer,artifacts,log=log.name)
                 reruns=[read(p) for p in sorted(artifacts.glob('rerun-*.json'))]
                 evidence+=reruns
@@ -482,7 +479,7 @@ def worker(runtime,token):
         rel='docs/handoffs/'+stream+'/reviews/'+s['cycle']+'/round-'+str(s['attempt'])+'.md'
         report=safe(root,rel); report.parent.mkdir(parents=True,exist_ok=True)
         lines=['# Independent feature review','',STATES[state],'',f'Reviewed at: {now()}',f'Commit: {s["fingerprint"]["head"]}',f'Source fingerprint: {s["fingerprint"]["digest"]}',
-               f'Reviewer: {reviewer}', f'Review calls used this cycle: {s["calls"]}/2','',reason or result.get('summary','No complete independent verdict.'),'','## Acceptance evidence','']
+               f'Reviewer: {reviewer}', f'Review calls recorded this cycle: {s["calls"]}','',reason or result.get('summary','No complete independent verdict.'),'','## Acceptance evidence','']
         for x in result.get('criteria',[]): lines.append('- '+x['id']+': '+x['status']+' — '+x['evidence'])
         lines+=['','## Checks','']
         for x in evidence: lines.append('- '+x['id']+': exit '+str(x['exit_code'])+'; `'+x['log']+'` (SHA-256 '+x['sha256']+')')
@@ -554,10 +551,10 @@ def main():
             print('\nReview finished. This pane stays open. Use work review --status or --follow-up when ready.',flush=True)
             os.execv('/bin/zsh',['zsh','-l'])
         return
-    p=argparse.ArgumentParser(prog='work review',description='Independent review: Claude (default), Codex or Cursor; two calls per cycle, 20 minutes per call. Claude uses Sonnet/medium/24 turns. Help/status/prepare never call a model.')
+    p=argparse.ArgumentParser(prog='work review',description='Independent review: Claude (default), Codex or Cursor; subscription-governed reviews, 20 minutes per call. Claude uses Sonnet/medium/24 turns. Help/status/prepare never call a model.')
     p.add_argument('stream',nargs='?'); p.add_argument('--base',help='explicit comparison branch, saved to review inputs')
     mode=p.add_mutually_exclusive_group(); mode.add_argument('--prepare',action='store_true');mode.add_argument('--status',action='store_true');mode.add_argument('--doctor',action='store_true')
-    mode.add_argument('--follow-up',action='store_true'); mode.add_argument('--new-cycle',action='store_true',help='explicitly authorize a new pair of review allowances')
+    mode.add_argument('--follow-up',action='store_true'); mode.add_argument('--new-cycle',action='store_true',help='start a new review history cycle; prior reports are preserved')
     p.add_argument('--reviewer',choices=agents.AGENTS,help='Independent reviewer; defaults to Claude or the current cycle reviewer')
     p.add_argument('--implemented-by',choices=agents.AGENTS,help='Implementation provider when no saved Work preference exists')
     p.add_argument('--json',action='store_true',help='machine-readable status')
@@ -569,7 +566,7 @@ def main():
         print(json.dumps(result) if args.json else '\n'.join(x['message'] for x in (result['account'],result['inputs'])))
     elif args.status:
         s=snapshot_status(root,stream,runtime)
-        print(json.dumps(s) if args.json else s['title']+' — '+stream+'\n'+s.get('phase','')+'\n'+s.get('reason','')+'\nReview calls remaining: '+str(s['remaining'])+('\nReport: '+str(root/s['report']) if s.get('report') else ''))
+        print(json.dumps(s) if args.json else s['title']+' — '+stream+'\n'+s.get('phase','')+'\n'+s.get('reason','')+'\nReview calls recorded: '+str(s.get('calls',0))+' (subscription limits apply)'+('\nReport: '+str(root/s['report']) if s.get('report') else ''))
     elif args.prepare: prepare(root,stream,args.base)
     else: launch(root,stream,runtime,packet,key,args)
 
@@ -609,17 +606,17 @@ For regressions, record fail-before / pass-after evidence in the test output.
 
 `work review --prepare`: create inputs only; no Claude usage.
 `work review`: run checks, then initial independent review if they pass.
-`work review --status`: current verdict, freshness and remaining allowance.
-`work review --follow-up`: one focused follow-up after fixes.
-`work review --new-cycle`: explicitly authorize further review after the pair.
+`work review --status`: current verdict, freshness and calls recorded.
+`work review --follow-up`: a focused follow-up after fixes.
+`work review --new-cycle`: start a new history cycle, preserving prior reports.
 
 Each Claude call: Sonnet, medium effort, 24 agent turns, 20-minute wall limit.
 Select --reviewer claude|codex|cursor (Claude default). It must differ from the saved Work provider;
 use --implemented-by only when that provider is unknown. Codex/Cursor inspect recorded evidence
 in read-only/ask mode with a 20-minute wall limit; only Claude has the declared-check rerun tools.
-At most two calls per cycle across all reviewers; failures after launch consume an allowance. No retries,
+No fixed review-call cap. Subscription limits govern usage. No automatic retries,
 model fallback or API-key billing. Pro's own limits still apply; quota exhaustion
-is incomplete. Routine test failures do not consume a Claude allowance.
+is incomplete. Routine test failures do not launch Claude.
 Reports are versioned under this handoff's reviews/. Logs are in ignored scratch/.
 Runtime counters and process state stay outside Git. No guarantee of perfect
 correctness: verification records demonstrated behavior for this version/scope.

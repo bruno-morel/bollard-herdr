@@ -166,11 +166,21 @@ class ReviewWorker(WorkerFixture):
         with self.assertRaisesRegex(RuntimeError, "disagrees"):
             R.implementation_agent(self.runtime, "cursor")
 
-    def test_rotating_provider_never_resets_attempt_budget(self):
+    def test_review_history_does_not_block_further_calls(self):
         for name in R.agents.AGENTS:
             state = dict(cycle="same", calls=2, reviewer=name, state="incomplete")
-            with self.assertRaisesRegex(RuntimeError, "both review attempts"):
-                R.reserve(state, True, False)
+            self.assertEqual(R.reserve(state, True, False), state)
+            self.assertEqual(R.reserve(state, False, False), state)
+
+    def test_unlimited_calls_still_reject_concurrent_review(self):
+        for state in ('preflight', 'reviewing'):
+            with self.assertRaisesRegex(RuntimeError, 'already active'):
+                R.reserve(dict(cycle='same', calls=10, state=state), True, False)
+
+    def test_subscription_review_rejects_paid_api_environment(self):
+        with patch.dict(R.os.environ, {'ANTHROPIC_API_KEY':'test-key'}):
+            with self.assertRaisesRegex(RuntimeError, 'subscription login'):
+                R.clean_env()
 
     def test_passing_checks_use_bounded_sonnet_and_keep_rerun_evidence(self):
         state = self.run_worker(rerun=True)

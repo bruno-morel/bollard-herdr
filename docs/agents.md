@@ -104,14 +104,15 @@ from several vendors, so choose a genuinely different model when that matters.
 
 ## Review limits and usage
 
-One initial review plus one follow-up, **shared across reviewers**. Changing the
-reviewer never grants more attempts. Only an explicit new cycle does. Failures
-after launch consume an attempt; failed preliminary tests do not. No automatic
-provider fallback. Missing or malformed evidence stays incomplete.
+Reviews have **no fixed call-count cap**. You can request further reviews without
+resetting an allowance; historical calls and reports remain recorded. Failed
+preliminary tests do not call a model. One Implement → Review run performs at
+most four review rounds, stopping on incomplete evidence or provider limits.
+There is no automatic provider fallback or repeated retry after a quota error.
 
 Claude review uses Sonnet, medium effort, 24 turns and a 20-minute wall limit.
 Codex and Cursor use their configured model with the same 20-minute wall limit
-and shared attempt counter. Their tools run in read-only/ask modes; the prompt
+and recorded call history. Their tools run in read-only/ask modes; the prompt
 requires inspection of recorded checks and reporting missing evidence. Claude's
 review tools additionally allow up to three declared check reruns. All providers
 must produce the same validated verdict. This is not a guarantee of correctness.
@@ -120,8 +121,12 @@ Helpers and test setup use the selected provider's account, separately from the
 final-review attempt counter. Claude is never selected automatically for those
 jobs. First test setup is capped at five minutes; subsequent reruns use no model.
 The review launcher rejects API-key environment settings instead of silently
-charging a different account. Subscription limits still apply; Bollard's two
-attempts are not a token or money quota.
+charging a different account. Subscription limits still apply. Bollard never
+purchases credits, enables extra usage or auto-reload, or raises spending limits.
+**Disable Usage credits / extra usage in Claude Settings → Usage** for a strict
+subscription-only stop. Auto-reload off alone still permits spending an existing
+paid balance. Bollard cannot verify or change this account setting from the CLI.
+See [Claude’s usage-credit settings](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans).
 
 ## More providers
 

@@ -210,12 +210,12 @@ class Controls(unittest.TestCase):
         p.run_tests()
         self.assertEqual(p.calls[0][1], ("tests", "fix", "feature", "--target", "t2d", "--json"))
 
-    def test_review_budget_exhausted_no_run_option(self):
+    def test_old_exhausted_budget_no_longer_blocks_review(self):
         p = self.panel()
         p.cache = {"review": {"remaining": 0}}
 
         def choose(title, rows, hint):
-            self.assertNotIn("run", [r[0] for r in rows])
+            self.assertIn("run", [r[0] for r in rows])
             return None
 
         p.choose = choose
@@ -224,7 +224,7 @@ class Controls(unittest.TestCase):
 
     def test_review_followup_preserves_shared_budget(self):
         p = self.panel()
-        p.cache = {"review": {"remaining": 1}}
+        p.cache = {"review": {"calls": 2, "remaining": 0}}
         p.choose = lambda *a: "run"
         p.review_action()
         args = p.calls[0][1]

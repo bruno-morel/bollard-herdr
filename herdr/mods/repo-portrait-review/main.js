@@ -122,7 +122,7 @@ export default class Review extends View {
    .child(h_flex().items_center().justify_between().child(div().text_size(11).text_color(t.dim).child('FEATURE REVIEW'))
      .child(this.button('review-open','Open',()=>run('layout.select',{stack:'read-review',child:'review-panel'}))))
    .child(div().text_size(12).text_color(color).truncate().child(title))
-   .child(div().text_size(10).text_color(t.dim).truncate().child(s?.stream?`${s.stream} · ${s.remaining}/2 review attempts left`:'Select a stream to review'))
+   .child(div().text_size(10).text_color(t.dim).truncate().child(s?.stream?`${s.stream} · ${s.calls || 0} reviews recorded`:'Select a stream to review'))
    .when(running,el=>el.child(div().h(3).rounded(2).bg(t.border).child(div().w(60).h(3).bg(t.working).loop('opacity',{from:.3,to:1,period:1500}))));
   let el=v_flex().id('review-panel').size_full().p(4).min_h(0).min_w(0).rounded(10).border_1().border_color(t.border).bg(toolColors().background).text_color(t.foreground)
    .child(h_flex().flex_none().px(14).py(8).gap(8).flex_wrap().items_center().border_b(1).border_color(t.border)
@@ -131,8 +131,7 @@ export default class Review extends View {
     .when(!!s?.stream&&!running&&!this.actionBusy,el=>el.child(h_flex().gap(4).flex_wrap().justify_end()
      .child(this.button('review-prepare',inputs?.exists?'Open inputs':'Prepare inputs',(_e,cx)=>inputs?.exists?this.openInputs(cx):this.act('--prepare',cx),{icon:'book',strong:true}))
      .when(!!ready?.ready&&ready.reviewer===this.reviewer(context)&&!s.calls,el=>el.child(this.button('review-start','Start review',(_e,cx)=>this.act('',cx),{icon:'shield',strong:true})))
-     .when(!!ready?.ready&&ready.reviewer===this.reviewer(context)&&s.calls===1,el=>el.child(this.button('review-follow','Review fixes',(_e,cx)=>this.act('--follow-up',cx),{icon:'shield',strong:true})))
-     .when(!!ready?.ready&&ready.reviewer===this.reviewer(context)&&s.calls>=2,el=>el.child(this.button('review-new','New review cycle',()=>openOverlay({mod:'confirm',kind:'dialog',width:430,height:230,props:{title:'Authorize another review cycle?',detail:'This allows up to two more review attempts, each capped at 20 minutes. Claude uses Sonnet with 24 turns. Your prior reports stay in the repository.',command:{name:'repo-portrait-review.new-cycle:'+encodeURIComponent(JSON.stringify({...context,reviewer:this.reviewer(context)}))}}}),{icon:'shield',strong:true})))))
+     .when(!!ready?.ready&&ready.reviewer===this.reviewer(context)&&s.calls>0,el=>el.child(this.button('review-follow','Review fixes',(_e,cx)=>this.act('--follow-up',cx),{icon:'shield',strong:true})))))
     .when(!!s?.report_markdown,e=>e.child(this.button('review-helper','Ask a helper',()=>askHelper(context,{pane:'review',source:s.report||'Review report · '+(s.cycle||s.state),text:'Recorded verdict: '+s.state+' · cycle '+(s.cycle||'unknown')+'\n\n'+s.report_markdown,observed_at:s.updated}),{icon:'agents'})))
     .when(!!context&&!this.actionBusy,e=>e.child(this.button('completion-check','Check completion',(_e,cx)=>this.checkCompletion(cx),{icon:'shield',strong:true})))
     .child(this.button('review-refresh','Refresh',(_e,cx)=>this.refresh(cx,true),{icon:'refresh',compact:true})))
@@ -148,8 +147,8 @@ export default class Review extends View {
     .child(div().text_size(11).text_color(t.dim).child('Existing evidence only · no test rerun or Claude call')))
    .child(v_flex().p(14).gap(8).flex_none()
     .child(div().text_size(17).font_semibold().text_color(color).child(title))
-    .child(div().text_size(12).text_color(t.muted).child(s?.stream?`${this.reviewer(context)} · ${s.remaining}/2 attempts left`:'Select an existing Studio/Work stream.'))
-    .child(div().text_size(12).text_color(t.dim).child(s?.phase||'One initial review + one follow-up. 20 minutes each; Claude: Sonnet, 24 turns.'))
+    .child(div().text_size(12).text_color(t.muted).child(s?.stream?`${this.reviewer(context)} · subscription limits apply`:'Select an existing Studio/Work stream.'))
+    .child(div().text_size(12).text_color(t.dim).child(s?.phase||'Subscription limits apply. 20 minutes per review; Claude: Sonnet, 24 turns.'))
     .when(!!ready&&!ready.ready&&!running,e=>e.child(v_flex().p(10).gap(7).rounded(8).bg(t.chrome)
      .child(div().font_semibold().text_size(13).child('Review needs setup'))
      .when(!!account&&!account.ready,e=>e
@@ -169,7 +168,7 @@ export default class Review extends View {
     .when(this.actionBusy,el=>el.child(div().text_size(12).text_color(t.muted).child('Working on your request…')))
     .when(!!this.message,el=>el.child(div().text_size(12).text_color(t.muted).child(this.message))));
   if(s?.report_markdown)el=el.child(TextView.markdown('review-report-'+s.updated,s.report_markdown).selectable(true).scrollable(true).p(16).flex_1().min_h(0));
-  else el=el.child(TextView.markdown('review-guide',`### Before starting\n\n1. The implementation agent completes the feature and its normal checks.\n2. Prepare inputs, then fill every acceptance criterion and the actual check commands in \`review-input.json\` beside the handoff.\n3. Start review and pause overlapping edits. The selected independent provider checks implementation and test quality. Claude also supports up to three declared check reruns.\n4. The implementation agent fixes findings. Review fixes uses the single follow-up.\n\n**Incomplete evidence stays incomplete.** Changed source or requirements invalidate approval. A finished agent turn is not a quality verdict.\n\nReports stay in Git; raw logs stay in ignored scratch/. Direct Git pushes are outside this local review gate.`).scrollable(true).p(16).flex_1().min_h(0));
+  else el=el.child(TextView.markdown('review-guide',`### Before starting\n\n1. The implementation agent completes the feature and its normal checks.\n2. Prepare inputs, then fill every acceptance criterion and the actual check commands in \`review-input.json\` beside the handoff.\n3. Start review and pause overlapping edits. The selected independent provider checks implementation and test quality. Claude also supports up to three declared check reruns.\n4. The implementation agent fixes findings. Review fixes requests another focused review.\n\n**Incomplete evidence stays incomplete.** Changed source or requirements invalidate approval. A finished agent turn is not a quality verdict.\n\nReports stay in Git; raw logs stay in ignored scratch/. Direct Git pushes are outside this local review gate.`).scrollable(true).p(16).flex_1().min_h(0));
   return el;
  }
 }

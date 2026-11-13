@@ -97,12 +97,7 @@ export default class Info extends View {
     if(connected===true)section=section.child(caption('Automatic check every 5 min while Usage is open · no model tokens.'));
     if(account?.quota_check?.note)section=section.child(caption(account.quota_check.note+' Retrying automatically.'));
     if(account?.reported_at)section=section.child(caption('Snapshot '+new Date(account.reported_at*1000).toLocaleString()));
-    const r=(shared('repo.review-cache')||{})[c?.key],left=number(r?.remaining);
-    section=section.child(v_flex().gap(6).p(8).rounded(6).bg(t.background)
-     .child(caption('LOCAL REVIEW BUDGET · this stream'))
-     .child(h_flex().gap(6).children([0,1].map(i=>div().h(8).flex_1().rounded(4).bg(left===null?t.border:i<left?color:color+'25'))))
-     .child(caption(left===null?'1 initial review + 1 follow-up per cycle.':left+' of 2 review calls remaining.'))
-     .child(caption('12 turns / 10 min each. Separate from subscription quota. Tests use no Claude.')));
+    section=section.child(caption('Reviews: subscription limits apply · Sonnet · 24 turns / 20 min per call. No automatic paid fallback.'));
    }
    if(id==='cursor')section=section.child(caption('Account quota is not exposed by this CLI integration. View exact usage in the Cursor dashboard.'));
    if(id==='gemini')section=section.child(caption(account?.installed?'Verify sign-in in Gemini. Account limits are not exposed here.':'Optional. Install and sign in to Gemini to use its own CLI; Studio/Work launchers currently offer Codex, Claude and Cursor.'));

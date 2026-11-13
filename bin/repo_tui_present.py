@@ -122,9 +122,9 @@ def info_lines(tab, cache, errors=None):
                     )
                 )
             if name == "claude":
-                left = cache.get("review", {}).get("remaining")
+                calls = cache.get("review", {}).get("calls", 0)
                 lines += [
-                    (f'Review calls: {left if left is not None else "?"} / 2', 1),
+                    (f'Review calls: {calls} · subscription limits apply', 1),
                     ("24 turns · 20 min per call", 0),
                 ]
             lines.append(("", 0))

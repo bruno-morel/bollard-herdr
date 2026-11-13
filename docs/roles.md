@@ -71,8 +71,8 @@ for parallel tasks instead of opening competing lead agents.
 
 Work profiles retain Docker setup, risk-based tests, completion checks and the
 independent-review rules. Studio profiles retain planning boundaries. A handoff
-itself starts no tests, review or helper and does not reset the two-attempt review
-allowance. It keeps the selected provider. Role instructions are guidance, not
+itself starts no tests, review or helper and preserves review
+history. It keeps the selected provider. Role instructions are guidance, not
 an operating-system permission boundary.
 
 Existing streams need no migration: missing profile preferences mean Studio or

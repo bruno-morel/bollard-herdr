@@ -217,8 +217,7 @@ component/browser evidence, not an automatic full regression run.
 | Prepare inputs | Create the acceptance/evidence inputs to fill before review. |
 | Open inputs | Inspect existing review inputs. |
 | Start review | Run the initial independent review when prerequisites are satisfied. |
-| Review fixes | Use the cycle's one follow-up after addressing findings. |
-| New review cycle | Explicitly authorize a further cycle; the confirmation explains the extra allowance. |
+| Review fixes | Request another focused review after addressing findings. |
 | Check completion | Check the risk assessment and current evidence; do not rerun tests or call a reviewer. |
 | Refresh icon | Read the latest review/completion status. |
 | Ask a helper | Discuss the report separately; this does not turn an unverified review into approval. |
@@ -232,8 +231,9 @@ If the reviewer is unavailable, use **Install guide**, **Sign in**, **Open sign-
 **Copy command** and **Check again** as offered. Authentication happens on the agent
 host. Review is not allowed to silently switch providers or hide missing evidence.
 
-One initial review and one follow-up share the same two-attempt budget across
-providers. Changing reviewer does not refill it. Consult the [current review limits](agents.md#review-limits-and-usage)
+There is no fixed review-call cap. Subscription limits govern usage; automatic
+Implement → Review runs remain bounded to four rounds and stop on quota errors
+or incomplete evidence. Consult the [current review limits](agents.md#review-limits-and-usage)
 for model settings and timeout details. A successful check or review never grants
 permission to merge or publish automatically.
 
@@ -286,7 +286,7 @@ only the rail; Refresh reads current data.
 
 Usage readings are snapshots, not billing guarantees. Codex may report short and
 weekly windows; Claude usage can be read without sending a chat. The local review
-attempt budget is separate from either subscription's quota. Cursor's exact quota
+call history is separate from either subscription's quota. Cursor's exact quota
 is not exposed here—**Usage ↗** opens its dashboard. A Gemini setup/limits card does
 not mean Gemini is supported by the workflow launcher. Available providers and
 setup instructions are listed in the [agent guide](agents.md).
@@ -325,7 +325,7 @@ when its terminal has focus.
 | Cursor keychain/login error | [Unlock and authenticate on the agent Mac](agents.md#cursor-recovery-on-a-remote-mac). Recreating a stream cannot fix authentication. |
 | Stream exists but no worktree is listed | Its Git branch may have survived removal. Choose Existing branch to restore the checkout. |
 | Stream says not open | The checkout exists, but a recognized lead conversation is not available; inspect/open its terminal. It is not proof the files are gone. |
-| Review button unavailable | Inspect account readiness, inputs and remaining attempts. Opening the panel does not start a review. |
+| Review button unavailable | Inspect account readiness, inputs and subscription availability. Opening the panel does not start a review. |
 | Test result is stale | Source or configured checks changed; obtain evidence for the current version. |
 | Operation timed out | Inspect the existing operation/terminal before retrying; it may have succeeded. |
 

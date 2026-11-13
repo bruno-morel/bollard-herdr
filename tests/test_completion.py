@@ -303,14 +303,12 @@ class Completion(unittest.TestCase):
 
 
 class ReviewAllowance(unittest.TestCase):
-    def test_follow_up_keeps_existing_budget_and_requires_explicit_new_cycle(self):
+    def test_further_reviews_preserve_history_without_reset(self):
         one = dict(cycle="existing", calls=1, state="changes-required", rounds=[])
         self.assertEqual(C.R.reserve(one, True, False), one)
-        with self.assertRaises(RuntimeError):
-            C.R.reserve(one, False, False)
+        self.assertEqual(C.R.reserve(one, False, False), one)
         used = dict(one, calls=2)
-        with self.assertRaises(RuntimeError):
-            C.R.reserve(used, True, False)
+        self.assertEqual(C.R.reserve(used, True, False), used)
         fresh = C.R.reserve(used, False, True)
         self.assertEqual(fresh["calls"], 0)
         self.assertNotEqual(fresh["cycle"], used["cycle"])

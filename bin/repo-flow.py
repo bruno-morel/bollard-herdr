@@ -322,11 +322,9 @@ def review_wait(root, stream, runtime, job, key):
     rr = R.resolve(stream)
     review_dir = rr[2]
     before = R.snapshot_status(root, stream, review_dir)
-    if before.get("calls", 0) >= 2:
-        fail("Both review attempts are used. No new review cycle was authorized.")
     args = argparse.Namespace(
         base=None,
-        follow_up=before.get("calls", 0) == 1,
+        follow_up=before.get("calls", 0) > 0,
         new_cycle=False,
         reviewer=job.get("reviewer", "claude"),
         implemented_by=job["agent"],
@@ -497,10 +495,6 @@ def perform(runtime, job):
                 result.get("reason")
                 or "Review incomplete; open Review before continuing."
             )
-        if result.get("calls", 0) >= 2:
-            fail(
-                "The follow-up still found issues. Both review attempts are used; inspect the report."
-            )
         if step == 4:
             fail(
                 "Automatic fix limit reached. Inspect the remaining failures; no further agent turn started."
@@ -556,11 +550,6 @@ def launch(args):
             ):
                 fail("A review is active; wait before changing this stream.")
         if args.action == "implement":
-            review = R.resolve(stream)
-            if read(review[2] / "state.json", {}).get("calls", 0) >= 2:
-                fail(
-                    "Both review attempts are used. Inspect Review; only an explicit new review cycle can grant more."
-                )
             for r in rows:
                 if (
                     r.get("labels", {}).get("repo-tools.role") == "helper"
@@ -853,7 +842,7 @@ def main(argv=None):
     role = argv.pop(0) if argv and argv[0] in ("studio", "work") else "work"
     p = argparse.ArgumentParser(
         prog=role + " flow",
-        description="Shared Herdr desktop/TUI workflow. Omit the subcommand to open the menu. Independent review: one final review and one follow-up; no automatic new cycle.",
+        description="Shared Herdr desktop/TUI workflow. Omit the subcommand to open the menu. Independent review: subscription limits apply; at most four automatic review rounds per workflow.",
     )
     p.add_argument(
         "action",

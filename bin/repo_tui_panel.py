@@ -874,7 +874,7 @@ class Panel:
 
     def review_action(self):
         d = self.cache.get("review", {})
-        left = d.get("remaining")
+        calls = d.get("calls", 0)
         rows = [
             (
                 "complete",
@@ -884,22 +884,18 @@ class Panel:
             ("doctor", "Check setup", "Authentication and required inputs"),
             ("prepare", "Prepare inputs", "No Claude call"),
         ]
-        if (
-            isinstance(left, int)
-            and left > 0
-            and d.get("state") not in ("reviewing", "preflight")
-        ):
+        if d.get("state") not in ("reviewing", "preflight"):
             rows += [
                 (
                     "run",
-                    "Start review" if left == 2 else "Follow-up review",
-                    str(left) + " calls left in this cycle",
+                    "Follow-up review" if calls else "Start review",
+                    "Subscription limits apply; no fixed call cap",
                 )
             ]
         ch = self.choose(
             "Review actions",
             rows,
-            "Same shared budget: 1 initial + 1 follow-up. No automatic reset.",
+            "Subscription limits apply. No automatic paid fallback.",
         )
         if not ch:
             return
@@ -914,7 +910,7 @@ class Panel:
                     (
                         x,
                         x,
-                        "Different provider from implementation; shared two-attempt limit",
+                        "Different provider from implementation; subscription limits apply",
                     )
                     for x in ("claude", "codex", "cursor")
                 ],
@@ -939,11 +935,11 @@ class Panel:
             return
         if ch == "run" and not self.confirm(
             "Start bounded independent review?",
-            f"{left} calls remain. 20 minutes per call; Claude: 24 turns.",
+            "Subscription limits apply. 20 minutes per call; Claude: 24 turns.",
         ):
             return
         args = ["review", stream] + (
-            ["--prepare"] if ch == "prepare" else ["--follow-up"] if left == 1 else []
+            ["--prepare"] if ch == "prepare" else ["--follow-up"] if calls else []
         )
         if ch == "run":
             args += ["--reviewer", reviewer]
@@ -1473,8 +1469,8 @@ class Panel:
             self.paint_text(
                 summary
                 + "\nK: check completion · no tests / Claude\n\n"
-                + str(d.get("remaining", "?"))
-                + " / 2 review attempts remain · R: review actions\n\n"
+                + str(d.get("calls", 0))
+                + " review calls recorded · R: review actions\n\n"
                 + text,
                 y,
                 1,
