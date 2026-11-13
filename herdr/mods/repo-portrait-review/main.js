@@ -2,7 +2,7 @@ import {reportPanel} from './signals.js';
 import {showAccount} from './account-pane.js';
 import {askHelper} from './helper.js';
 import {button as control,toolColors} from './ui.js';
-import { scopedLocation, scopedRequest, leadFor } from './scope.js';
+import { scopedLocation, scopedRequest, leadFor, requestFile } from './scope.js';
 import { View, div } from 'gpui-kit';
 import { v_flex, h_flex, TextView } from 'gpui-base';
 import { spaces, panes, terminals, focused, props, shared, setShared, exec, theme, run, notify, openOverlay, nextCommand } from 'herdr';
@@ -90,9 +90,11 @@ export default class Review extends View {
  }
  openInputs(cx){
   const c=location();if(!c)return;
-  cx.spawn(async cx=>{try{const r=await exec('repo-read',['--show','docs/handoffs/'+c.stream+'/review-input.json'],{cwd:c.cwd,on:c.on});if(r.code)throw new Error(r.stderr||r.stdout);}
-   catch(e){if(location()?.key===c.key)this.message=String(e);cx.notify();}});
+  try{requestFile(c,'docs/handoffs/'+c.stream+'/review-input.json');this.message='';this.actionError=false;}
+  catch(e){this.message=String(e);this.actionError=true;}
+  cx.notify();
  }
+
  button(id,title,fn,style={}){return control(id,title,fn,style);}
  render(cx){
   if(props()?.header){const t=theme();return h_flex().w_full().h(32).px(8).gap(4).items_center().bg(t.chrome)

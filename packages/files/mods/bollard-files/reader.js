@@ -90,7 +90,7 @@ export default class RepoReader extends View {
     this.load(path,cx); cx.notify();
   }
   async acknowledge(request, status, message = '') {
-    if (!request) return;
+    if (!request || request.local) return;
     try { await hc(['label',request.address,'repo-read.result='+JSON.stringify({id:request.id,status,message})]); }
     catch { /* Display remains usable if an acknowledgement cannot reach the core. */ }
   }
@@ -170,7 +170,7 @@ export default class RepoReader extends View {
     const draftKey=props()?.lane+':'+this.mode,unsaved=shared('repo.portrait.unsaved')||{},dirty=!!this.editing||this.drafts.size>0;
     if(unsaved[draftKey]!==dirty)setShared('repo.portrait.unsaved',{...unsaved,[draftKey]:dirty});
     const request=requested();
-    if (request && (this.mode==='docs')===/\.(md|markdown|mdown|mkd|txt)$/i.test(request.path) && this.context?.root===request.root && this.context?.on===machineOf(request.address) && !this.seen.has(request.key)) {
+    if (request && (this.mode==='docs')===/\.(md|markdown|mdown|mkd|txt)$/i.test(request.path) && this.context?.root===request.root && (request.local?this.context?.on===request.on:this.context?.on===machineOf(request.address)) && !this.seen.has(request.key)) {
       this.seen.add(request.key); this.load(request.path,cx,request);
     }
     const t=theme();
