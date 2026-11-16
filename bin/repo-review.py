@@ -275,6 +275,10 @@ def snapshot_status(root,stream,runtime):
             if fingerprint(root,stream,load_config(root,stream))!=s['fingerprint']:
                 s=dict(s,state='stale',reason='This report predates the updated Git freshness checks; revalidate before relying on it.' if s['fingerprint'].get('algorithm')!='git-source-v2' else 'Source, tests, requirements or base branch changed since this review.')
         except (RuntimeError,OSError,ValueError) as e: s=dict(s,state='stale',reason=str(e))
+    if s.get('state') == 'stale':
+        recorded=read(runtime/'state.json',{})
+        if recorded.get('reason') and recorded.get('reason') != s.get('reason'):
+            s=dict(s,reason=s['reason']+' Previous attempt: '+recorded['reason'])
     s=dict(s,title=STATES.get(s['state'],s['state']),stream=stream,root=str(root),remaining=None,review_policy='subscription',automatic_review_limit=4)
     report=s.get('report')
     if report:
@@ -295,11 +299,13 @@ def process(argv,root,log,seconds,env=None,tick=None):
         p=sp.Popen(argv,cwd=root,stdout=out,stderr=sp.STDOUT,env=env,start_new_session=True)
         active=log.parent/('.active-'+str(p.pid))
         deadline=time.monotonic()+seconds
+        stop_reason='Command cleanup'
         try:
             active.write_text(str(p.pid))
             while p.poll() is None:
                 if tick: tick()
                 if time.monotonic()>deadline or log.stat().st_size>8_000_000:
+                    stop_reason=('Check exceeded its '+str(seconds)+'s time limit' if time.monotonic()>deadline else 'Check exceeded its output limit')
                     os.killpg(p.pid,signal.SIGKILL); p.wait(); return -1
                 time.sleep(.5)
             return -1 if log.stat().st_size>8_000_000 else p.returncode
@@ -307,6 +313,8 @@ def process(argv,root,log,seconds,env=None,tick=None):
             # Also clean test children which outlived their parent.
             try: os.killpg(p.pid,signal.SIGKILL)
             except ProcessLookupError: pass
+            except PermissionError as exc:
+                fail(stop_reason+': the operating system denied stopping this check process group. Review stopped; no approval recorded. Inspect its log and remaining processes before retrying. ('+str(exc)+')')
             p.wait()
             active.unlink(missing_ok=True)
 
@@ -315,11 +323,16 @@ def check(root,config,ident,artifacts,serial,tick=None):
     if x is None: fail('unknown check ID')
     log=artifacts/(ident+'-'+str(serial)+'.log')
     cwd=root if x.get('cwd','.')=='.' else safe(root,x['cwd'])
-    started=now(); code=process(x['argv'],cwd,log,x.get('timeout',120),env=dict(os.environ,CI='1'),tick=tick)
+    started=now(); runner_error=None
+    try:
+        code=process(x['argv'],cwd,log,x.get('timeout',120),env=dict(os.environ,CI='1'),tick=tick)
+    except (OSError,RuntimeError,sp.SubprocessError) as exc:
+        code=-1; runner_error=ident+': '+str(exc)
+        if not log.exists(): log.write_text('')
     text=log.read_text(errors='replace')
     return {'id':ident,'kind':x['kind'],'argv':x['argv'],'exit_code':code,'started':started,'finished':now(),
             'log':str(log.relative_to(root)),'sha256':hashlib.sha256(log.read_bytes()).hexdigest(),
-            'tail':text[-12000:],'truncated':len(text)>12000,'native_summary':native_summary(text)}
+            'tail':text[-12000:],'truncated':len(text)>12000,'native_summary':native_summary(text),'runner_error':runner_error}
 
 SCHEMA={'type':'object','additionalProperties':False,'properties':{
  'verdict':{'type':'string','enum':['verified','changes-required','incomplete']},
@@ -429,18 +442,20 @@ def worker(runtime,token):
                 saved = run([BIN/'work','_herdr-env',stream],cwd=root,capture_output=True,text=True,timeout=20)
                 os.environ.update(json.loads(saved.stdout))
             if fingerprint(root,stream,c)!=s['fingerprint']: fail('source changed before review started')
+            patch=git(root,'diff','--no-ext-diff','--no-textconv',s['fingerprint']['merge_base'],'--','.',':(exclude)scratch',':(exclude)docs/handoffs/'+stream+'/reviews',raw=True).decode(errors='replace')
+            if len(patch)>90000:
+                fail('Review scope is too large ('+str(len(patch))+' characters; limit 90000). Narrow the intended review base/scope without dropping required acceptance criteria. No checks or model call started.')
             for i,x in enumerate(c['checks'],1):
                 state_set(runtime,s,phase='Check '+str(i)+'/'+str(len(c['checks']))+': '+x['id'],heartbeat=time.time())
                 e=check(root,c,x['id'],artifacts,i,tick=tick)
                 evidence.append(e); state_set(runtime,s,checks=evidence)
+                if e.get('runner_error'): fail(e['runner_error'])
             if fingerprint(root,stream,c)!=s['fingerprint']: fail('checks changed source files; reconcile changes and review again')
             if any(e['exit_code'] for e in evidence):
                 state='changes-required'; reason='Routine checks failed. Fix them before review; no model call used.'
             else:
                 env=auth() if reviewer=='claude' else review_env(reviewer)
                 if s.get('implemented_by'): independent(reviewer,s['implemented_by'])
-                patch=git(root,'diff','--no-ext-diff','--no-textconv',s['fingerprint']['merge_base'],'--','.',':(exclude)scratch',':(exclude)docs/handoffs/'+stream+'/reviews',raw=True).decode(errors='replace')
-                if len(patch)>90000: fail('change exceeds the compact review budget; split the feature or review scope first')
                 job=read(runtime/'job.json'); job['evidence']=evidence; write(runtime/'job.json',job)
                 prior=s.get('previous_result')
                 prompt=RULES+'\nReview packet:\n'+json.dumps({'stream':stream,'target':s['fingerprint'],'criteria':c['criteria'],'checks':[dict(e,tail=e.get('tail','')[-2000:],truncated=e.get('truncated',False) or len(e.get('tail',''))>2000) for e in evidence],'previous_review':prior},ensure_ascii=False)+'\nTracked diff (untracked files must also be inspected):\n'+patch

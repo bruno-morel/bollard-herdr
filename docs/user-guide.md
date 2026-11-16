@@ -108,6 +108,14 @@ After an agent exits, its terminal stays available. The launcher menu is explici
 For an intentional fresh start after real work, prefer the checkpoint action below
 so the outgoing agent saves context first. Chat history is not shared between CLIs.
 
+### Copy and paste in remote conversations
+
+Hold **Shift while dragging** to select text with Herdr instead of the remote
+agent. **⌘C** copies that selection to your Mac; **⌘V** pastes from your Mac.
+On Linux/Windows, use **Ctrl+Shift+C / Ctrl+Shift+V**. A message from an agent
+about the “host clipboard” may refer to the remote machine. Panel buttons such
+as **Copy logs** use the desktop app’s clipboard directly.
+
 ## Docker
 
 Docker shows the selected stream's Compose logs. Opening it does not start a stack.

@@ -308,3 +308,30 @@ class TestWorker(WorkerFixture):
 
     def test_changed_source_after_checks_is_stale(self):
         self.assertEqual(self.run_tests(changed=True)["state"], "stale")
+
+class ReviewFailureDetails(WorkerFixture):
+    def test_check_preserves_log_when_process_cleanup_is_denied(self):
+        def denied(argv, root, log, seconds, **kwargs):
+            log.write_text('37 browser tests passed; suite still running')
+            raise PermissionError(1, 'Operation not permitted')
+        with patch.object(R, 'process', side_effect=denied):
+            result=R.check(self.root,self.config,'browser',self.artifacts,1)
+        self.assertEqual(result['exit_code'],-1)
+        self.assertIn('browser:',result['runner_error'])
+        self.assertIn('37 browser tests',result['tail'])
+        self.assertTrue((self.root/result['log']).is_file())
+
+    def test_stale_status_keeps_original_failure(self):
+        R.write(self.runtime/'state.json',dict(self.state,state='incomplete',reason='Browser timed out; cleanup denied'))
+        with patch.object(R,'fingerprint',return_value={'changed':True}):
+            status=R.snapshot_status(self.root,'demo',self.runtime)
+        self.assertEqual(status['state'],'stale')
+        self.assertIn('Browser timed out; cleanup denied',status['reason'])
+
+    def test_oversized_scope_is_rejected_before_checks_or_model(self):
+        with patch.object(R,'git',side_effect=lambda *a,**k: b'x'*90001 if k.get('raw') else ''), patch.object(R,'check') as check:
+            state=self.run_worker()
+        self.assertEqual(state['state'],'incomplete')
+        self.assertEqual(state['calls'],0)
+        check.assert_not_called()
+        self.assertIn('No checks or model call started',state['reason'])
