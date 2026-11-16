@@ -110,7 +110,14 @@ so the outgoing agent saves context first. Chat history is not shared between CL
 
 ### Copy and paste in remote conversations
 
-Hold **Shift while dragging** to select text with Herdr instead of the remote
+Codex launched or resumed through Bollard in Herdr receives `HERDR_ENV=1`,
+which forwards its clipboard writes to the viewer instead of only copying on
+the remote host. This addresses a [known upstream compatibility issue](https://github.com/herdrdev/herdr-core/issues/84).
+Already-running agents keep their old environment until their next normal
+exit/resume; installing this fix does not restart them. It does not change
+Claude or Cursor clipboard behavior.
+
+For Herdr's own selection, try holding **Shift while dragging** to select text with Herdr instead of the remote
 agent. **⌘C** copies that selection to your Mac; **⌘V** pastes from your Mac.
 On Linux/Windows, use **Ctrl+Shift+C / Ctrl+Shift+V**. A message from an agent
 about the “host clipboard” may refer to the remote machine. Panel buttons such

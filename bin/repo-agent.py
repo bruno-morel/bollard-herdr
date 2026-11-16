@@ -324,6 +324,15 @@ def configure(root, stream, role, requested):
         executable(name)
         f.write_text(name + '\n')
 
+def agent_environment(name):
+    env = dict(os.environ)
+    # Codex recognizes this legacy marker for forwarding clipboard writes to
+    # the Herdr viewer; herdr-core currently supplies only HC_TERMINAL_ID.
+    if name == 'codex' and env.get('HC_TERMINAL_ID'):
+        env['HERDR_ENV'] = '1'
+    return env
+
+
 def run_agent(root, stream, role, requested, resume=None, once=False, take=False, task_file=None):
     f = preferences(root, stream, role)
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -389,7 +398,7 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                        stdout=sp.DEVNULL, stderr=sp.DEVNULL)
             print('Starting ' + name + ' in ' + role.upper() + ' role.', flush=True)
             try:
-                result = sp.run(args, cwd=root)
+                result = sp.run(args, cwd=root, env=agent_environment(name))
             except OSError:
                 if pending_take is not None:
                     takeover.write_text(pending_take)
