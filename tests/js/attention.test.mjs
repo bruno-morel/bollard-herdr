@@ -67,3 +67,14 @@ test('native child inherits stream context and qualifies its parent without muta
  assert.equal(result.display,'check-layout');
  assert.equal(child.labels,undefined);
 });
+
+test('picker details tolerate native helpers with missing labels and inherit display context',async()=>{
+ const source=readFileSync(new URL('../../herdr/mods/repo-stream-picker/model.js',import.meta.url),'utf8');
+ const {conversationDetails}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ for(const labels of [undefined,{},null]){
+  const d=conversationDetails({address:'box/t2',parent:'t1',labels,status:{app:'codex'}},{stream:'demo',cwd:'/repo',role:'work'});
+  assert.equal(d.role.toUpperCase(),'HELPER');assert.equal(d.stream,'demo');assert.equal(d.cwd,'/repo');assert.equal(d.agent,'codex');
+ }
+ assert.equal(conversationDetails({address:'t1'}).role.toUpperCase(),'AGENT');
+ assert.equal(conversationDetails({labels:{'repo-tools.role':'studio'}}).role.toUpperCase(),'STUDIO');
+});

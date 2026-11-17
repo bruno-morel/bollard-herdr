@@ -9,3 +9,13 @@ export function pairedNames(state,field,value){
  return next;
 }
 export function defaultNames(){return {stream:'',folder:'',streamEdited:false,folderEdited:false};}
+
+// Display metadata is optional for native child agents. Never mutate core labels.
+export function conversationDetails(row, context={}) {
+ context=context||{};
+ const labels=row?.labels||{};
+ return {role:labels['repo-tools.role'] || (row?.parent ? 'helper' : context.role) || 'agent',
+ stream:labels['repo-tools.stream'] || context.stream || row?.name || row?.title || row?.address || 'Conversation',
+ agent:labels['repo-tools.agent'] || row?.status?.app || row?.agent || 'Agent',
+ cwd:labels['repo-tools.checkout'] || row?.cwd || context.cwd || ''};
+}

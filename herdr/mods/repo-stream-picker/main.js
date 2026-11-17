@@ -39,6 +39,7 @@ import {
   watchOpen
 } from './navigation.js';
 import {
+  conversationDetails,
   machineOf,
   slug,
   running,
@@ -447,11 +448,17 @@ export default class StreamPicker extends View {
       }).flex_1().justify_center()));
     if (this.mode === 'existing') {
       body = body.child(this.zone('CONTINUE WHERE YOU LEFT OFF', 'message', v_flex().gap(12)
-        .child(select('conversation', 'Conversation', this.active, all.map(r => option(r.address, (this.activeNames[r.address] || r.cwd?.split('/').slice(-2, -1)[0]?.replace(/-worktrees$/, '') || '') + ' / ' + r.labels?.['repo-tools.stream'], r.labels?.['repo-tools.role'] + ' · ' + (machineOf(r.address) || 'This computer') + ' · ' + r.labels?.['repo-tools.agent'])), (value, cx) => {
+        .child(select('conversation', 'Conversation', this.active, all.map(r => {
+          const details=conversationDetails(r,r.address===p.activeTerminal ? p.context : {});
+          return option(r.address, (this.activeNames[r.address] || '') + ' / ' + details.stream, details.role + ' · ' + (machineOf(r.address) || 'This computer') + ' · ' + details.agent);
+        }), (value, cx) => {
           this.active = value;
           cx.notify();
         }))
-        .when(!!current, e => e.child(caption(current.labels['repo-tools.role'].toUpperCase() + ' · ' + (machineOf(current.address) || 'This computer'))).child(caption(current.labels['repo-tools.checkout'] || current.cwd)))
+        .when(!!current, e => {
+          const details=conversationDetails(current,current.address===p.activeTerminal ? p.context : {});
+          return e.child(caption(details.role.toUpperCase() + ' · ' + (machineOf(current.address) || 'This computer'))).child(caption(details.cwd));
+        })
         .child(caption(all.length ? 'Your existing role, model, prompt and conversation stay together.' : 'No active conversations. Use New conversation to open a worktree or start a stream.'))));
     } else {
       const roleOptions = data?.roles || {studio:{label:'Studio',base:'studio'},work:{label:'Work',base:'work'}};
