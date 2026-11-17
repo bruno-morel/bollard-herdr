@@ -56,7 +56,7 @@ class Windows(unittest.TestCase):
                 matches=W.agent_windows(root,ctx)
             self.assertEqual(matches[0][1],child)
             self.assertTrue(matches[0][3])
-            self.assertEqual(len(matches),2)
+            self.assertEqual(len(matches),1)
 
     def test_attention_focus_never_launches_window_or_agent(self):
         with tempfile.TemporaryDirectory() as d:

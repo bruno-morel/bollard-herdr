@@ -36,6 +36,7 @@ test('stream labels never become native tab IDs when opening a conversation', as
  const {showConversation}=await import('data:text/javascript;base64,'+Buffer.from(prelude+source+'\n// focus test').toString('base64'));
  showConversation({address:'t1',cwd:'/repo',labels:{'herdr.space':'old-space','herdr.tab':'4','repo-tools.stream':'demo','repo-tools.role':'studio'}},'host','top');
  assert.equal(store['repo.portrait.lanes'].top.terminal,'host/t1');
- assert.deepEqual(calls,[['pane.focus',{terminal:'host/t1'}]]);
+ assert.deepEqual(calls,[]);
+ assert.deepEqual(store['repo.portrait.focus-pending'],{lane:'top',terminal:'host/t1'});
  delete globalThis.navigationTest;
 });

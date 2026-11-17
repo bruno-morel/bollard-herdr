@@ -38,11 +38,16 @@ export function showConversation(t, on, lane = null, options = {}) {
         on,
         repo: options.repo || (t.labels?.['repo-tools.checkout'] || t.cwd).split('-worktrees/')[0].split('/').pop(),
         cwd: t.labels?.['repo-tools.checkout'] || t.cwd,
-        stream: t.labels?.['repo-tools.stream'],
-        role: t.labels?.['repo-tools.role'],
+        stream: t.labels?.['repo-tools.stream'] || options.context?.stream,
+        role: options.context?.role || t.labels?.['repo-tools.role'],
+        exactTerminal: !!options.exactTerminal,
         terminal: qualify(on, t.address)
       }
     });
+  }
+  if (lane) {
+    setShared('repo.portrait.focus-pending', {lane, terminal: qualify(on,t.address)});
+    return;
   }
   // Terminal labels group streams; they are not native window tab IDs.
   run('pane.focus', {
@@ -56,8 +61,9 @@ export async function showInWindow(t, on, lane, options = {}) {
   const context = {
     on,
     cwd,
-    stream: t.labels?.['repo-tools.stream'],
-    role: t.labels?.['repo-tools.role'],
+    stream: t.labels?.['repo-tools.stream'] || options.context?.stream,
+    role: options.context?.role || t.labels?.['repo-tools.role'],
+    exactTerminal: !!options.exactTerminal,
     terminal: qualify(on, t.address),
     repo: options.repo || cwd.split('-worktrees/')[0].split('/').pop()
   };

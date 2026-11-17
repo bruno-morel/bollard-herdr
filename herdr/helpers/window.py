@@ -44,7 +44,9 @@ def prepare(source,lane,context=None):
  if not context['cwd'].startswith('/') or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*',context['stream']) or context.get('role') not in ('studio','work'):
   raise RuntimeError('Invalid stream context for the new window.')
  origin=Path((load(source/'repo-window.json',{}) or {}).get('origin',str(source))).resolve()
- key=hashlib.sha256(json.dumps([context.get('on'),context['cwd'],context.get('role')]).encode()).hexdigest()[:12]
+ identity=[context.get('on'),context['cwd'],context.get('role')]
+ if context.get('exactTerminal'):identity.append(context.get('terminal'))
+ key=hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:12]
  slug=re.sub('[^a-z0-9-]+','-',(context.get('repo','stream')+'-'+context['stream']).lower()).strip('-')[:48]
  legacy=origin/'screens'/(slug+'-'+key)
  # macOS Unix sockets cannot use long profile paths. Keep existing short profiles.
@@ -147,10 +149,8 @@ def agent_windows(source, context):
   state=load(home/'shared.json',{}) or {}
   for lane,c in state.get('repo.portrait.displayed',state.get('repo.portrait.lanes',{})).items():
    exact=c.get('terminal')==context.get('terminal')
-   parent=c.get('terminal')==context.get('parent') and bool(context.get('parent'))
-   same=(bool(context.get('cwd')) and c.get('cwd')==context['cwd'] and c.get('on')==context.get('on')
-         and c.get('stream')==context.get('stream') and (c.get('role')==context.get('role') or context.get('role')=='helper'))
-   if exact or parent or same:matches.append((0 if exact else 1 if parent else 2,home,lane,exact))
+   # A parent's window cannot focus an undisplayed child terminal.
+   if exact:matches.append((0,home,lane,True))
  return sorted(matches,key=lambda x:(x[0],str(x[1])))
 
 

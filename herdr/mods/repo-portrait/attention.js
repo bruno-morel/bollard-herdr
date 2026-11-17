@@ -8,12 +8,15 @@ export function attentionRows(rows){
   if(status!=='blocked'&&!done)return false;
   seen.add(r.address);return true;
  }).map(r=>{
-  const l=r.labels||{},status=typeof r.status==='string'?r.status:r.status?.state;
+  const host=r.address.includes('/')?r.address.slice(0,r.address.lastIndexOf('/')):null;
+  const parentId=r.parent && host && !r.parent.includes('/') ? host+'/'+r.parent : r.parent;
+  const parent=rows.find(t=>t.address===parentId);
+  const l={...(parent?.labels||{}),...(r.labels||{})},status=typeof r.status==='string'?r.status:r.status?.state;
   const cwd=l['repo-tools.checkout']||r.cwd||'';
   return {...r,reason:status==='blocked'?'Waiting for input':'Unread response',
-   display:(l['repo-tools.stream']||r.title||r.name||r.address),
-   context:{terminal:r.address,parent:r.parent,on:r.address.includes('/')?r.address.slice(0,r.address.lastIndexOf('/')):null,
-    cwd,stream:l['repo-tools.stream'],role:l['repo-tools.role']}};
+   display:(r.parent ? (r.title||r.name||r.address) : (l['repo-tools.stream']||r.title||r.name||r.address)),
+   context:{terminal:r.address,parent:parentId,on:r.address.includes('/')?r.address.slice(0,r.address.lastIndexOf('/')):null,
+    cwd,stream:l['repo-tools.stream'],role:parent?.labels?.['repo-tools.role']||l['repo-tools.role']}};
  }).sort((a,b)=>(a.reason==='Waiting for input'?0:1)-(b.reason==='Waiting for input'?0:1)||a.display.localeCompare(b.display));
 }
 export async function focusAttention(row){

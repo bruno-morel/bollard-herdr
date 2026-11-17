@@ -5,7 +5,7 @@ export const VIEWS='repo.portrait.views';
 export function laneConfig(lane=props()?.lane){return (shared(KEY)||{})[lane]||props()?.context||null;}
 export function machineOf(address){return address.includes('/')?address.slice(0,address.lastIndexOf('/')):null;}
 export function matching(all,c){return c?all.filter(t=>t.state==='live'&&machineOf(t.address)===c.on&&(t.labels?.['repo-tools.checkout']||t.cwd)===c.cwd):[];}
-export function leadFor(all,c){const rows=matching(all,c).filter(t=>t.labels?.['repo-tools.role']===c.role);return rows.find(t=>t.address===c.terminal)||rows[0]||null;}
+export function leadFor(all,c){if(c?.exactTerminal)return matching(all,c).find(t=>t.address===c.terminal)||null;const rows=matching(all,c).filter(t=>t.labels?.['repo-tools.role']===c.role);return rows.find(t=>t.address===c.terminal)||rows[0]||null;}
 export function scopedLocation(){const c=laneConfig();return c?{...c,key:JSON.stringify([c.on,c.cwd])}:null;}
 const FILE_REQUESTS='repo.portrait.file-requests';
 export function requestFile(context,path,lane=props()?.lane){

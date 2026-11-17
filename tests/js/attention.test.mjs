@@ -56,3 +56,14 @@ test('attention picker includes the exact helper without listing unrelated helpe
  assert.deepEqual(running([helper('box/t1'),helper('box/t2')],'box/t2').map(r=>r.address),['box/t2']);
  assert.deepEqual(running([helper('box/t2')]),[]);
 });
+
+test('native child inherits stream context and qualifies its parent without mutating labels',()=>{
+ const parent=row('box/t1','working',{cwd:'/repo',labels:{'repo-tools.role':'work','repo-tools.stream':'demo'}});
+ const child=row('box/t2','blocked',{cwd:'/repo',parent:'t1',name:'check-layout'});
+ const result=attentionRows([parent,child])[0];
+ assert.equal(result.context.parent,'box/t1');
+ assert.equal(result.context.stream,'demo');
+ assert.equal(result.context.role,'work');
+ assert.equal(result.display,'check-layout');
+ assert.equal(child.labels,undefined);
+});

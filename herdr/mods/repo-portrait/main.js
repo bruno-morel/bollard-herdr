@@ -217,7 +217,7 @@ export default class Portrait extends View {
           }
           if (cmd.startsWith('attention-focus:')) {
             const target=JSON.parse(decodeURIComponent(cmd.slice(16)));
-            if(laneIds(layout()).includes(target.lane)){
+            if(laneIds(layout()).includes(target.lane) && find(layout(),target.lane+'-conversation')?.content?.terminal===target.terminal){
               view(target.lane,null);
               run('pane.focus',{terminal:target.terminal});
             }else notify({title:'Stream view is no longer open',body:'Select the conversation with the stream picker.',level:'info'});
@@ -412,6 +412,11 @@ export default class Portrait extends View {
     }));
     if(JSON.stringify(shared('repo.portrait.displayed'))!==JSON.stringify(displayed))
       setShared('repo.portrait.displayed',displayed);
+    const pendingFocus=shared('repo.portrait.focus-pending');
+    if(pendingFocus && find(current,pendingFocus.lane+'-conversation')?.content?.terminal===pendingFocus.terminal){
+      setShared('repo.portrait.focus-pending',null);
+      run('pane.focus',{terminal:pendingFocus.terminal});
+    }
     const copy = JSON.parse(JSON.stringify(current));
     let changed = false;
     const selected = shared(VIEWS) || {};

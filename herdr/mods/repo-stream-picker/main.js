@@ -63,7 +63,7 @@ export default class StreamPicker extends View {
     this.on = loc?.on ?? p.on ?? null;
     this.role = p.role || loc?.role || 'studio';
     this.agent = 'codex';
-    this.active = running(terminals(), props()?.activeTerminal).find(r => r.address === p.activeTerminal)?.address || running(terminals(), props()?.activeTerminal).find(r => machineOf(r.address) === this.on && (r.labels['repo-tools.checkout'] || r.cwd) === loc?.cwd && r.labels['repo-tools.role'] === this.role)?.address || running(terminals(), props()?.activeTerminal)[0]?.address || null;
+    this.active = running(terminals(), props()?.activeTerminal).find(r => r.address === p.activeTerminal)?.address || running(terminals(), props()?.activeTerminal).find(r => machineOf(r.address) === this.on && (r.labels?.['repo-tools.checkout'] || r.cwd) === loc?.cwd && r.labels?.['repo-tools.role'] === this.role)?.address || running(terminals(), props()?.activeTerminal)[0]?.address || null;
     this.mode = p.fresh ? 'new' : this.active ? 'existing' : 'new';
     if (this.mode === 'new') this.active = null;
     this.advanced = false;
@@ -123,7 +123,7 @@ export default class StreamPicker extends View {
   loadActiveNames(cx) {
     cx.spawn(async cx => {
       await Promise.allSettled(running(terminals(), props()?.activeTerminal).map(async row => {
-        const r = await exec('repo-streams.py', ['catalog', '--repo', row.labels['repo-tools.checkout'] || row.cwd], {
+        const r = await exec('repo-streams.py', ['catalog', '--repo', row.labels?.['repo-tools.checkout'] || row.cwd], {
           on: machineOf(row.address)
         });
         if (!r.code) {
@@ -198,7 +198,7 @@ export default class StreamPicker extends View {
     });
   }
   candidates() {
-    return [...new Set([...running(terminals(), props()?.activeTerminal).filter(r => machineOf(r.address) === this.on).map(r => r.labels['repo-tools.checkout'] || r.cwd), ...spaces().filter(s => s.machine === this.on && s.folder && s.folder !== '~').map(s => s.folder)])].slice(0, 8);
+    return [...new Set([...running(terminals(), props()?.activeTerminal).filter(r => machineOf(r.address) === this.on).map(r => r.labels?.['repo-tools.checkout'] || r.cwd), ...spaces().filter(s => s.machine === this.on && s.folder && s.folder !== '~').map(s => s.folder)])].slice(0, 8);
   }
   discoverRepos(cx, token) {
     const on = this.on,
@@ -308,18 +308,20 @@ export default class StreamPicker extends View {
         if (this.active) {
           const row = running(terminals(), props()?.activeTerminal).find(t => t.address === this.active);
           if (!row) throw Error('That conversation has ended. Choose its worktree to reopen it.');
-          const cwd = row.labels['repo-tools.checkout'] || row.cwd,
+          const cwd = row.labels?.['repo-tools.checkout'] || row.cwd,
             on = machineOf(row.address);
           const r = await exec('repo-streams.py', ['catalog', '--repo', cwd], {
             on
           });
           if (r.code) throw Error(r.stderr || r.stdout);
           const data = JSON.parse(r.stdout);
-          const stream = row.labels['repo-tools.stream'];
+          const stream = row.labels?.['repo-tools.stream'] || props()?.context?.stream;
           if (data.current?.stream !== stream) throw Error('The agent’s checkout no longer matches its stream. Refresh before continuing.');
           await this.present(row, on, {
             placement: props().placement,
-            repo: data.repo
+            repo: data.repo,
+            context: props()?.activeTerminal === row.address ? props()?.context : null,
+            exactTerminal: props()?.activeTerminal === row.address
           });
           closeOverlay(props().overlay);
           return;
@@ -445,7 +447,7 @@ export default class StreamPicker extends View {
       }).flex_1().justify_center()));
     if (this.mode === 'existing') {
       body = body.child(this.zone('CONTINUE WHERE YOU LEFT OFF', 'message', v_flex().gap(12)
-        .child(select('conversation', 'Conversation', this.active, all.map(r => option(r.address, (this.activeNames[r.address] || r.cwd?.split('/').slice(-2, -1)[0]?.replace(/-worktrees$/, '') || '') + ' / ' + r.labels['repo-tools.stream'], r.labels['repo-tools.role'] + ' · ' + (machineOf(r.address) || 'This computer') + ' · ' + r.labels['repo-tools.agent'])), (value, cx) => {
+        .child(select('conversation', 'Conversation', this.active, all.map(r => option(r.address, (this.activeNames[r.address] || r.cwd?.split('/').slice(-2, -1)[0]?.replace(/-worktrees$/, '') || '') + ' / ' + r.labels?.['repo-tools.stream'], r.labels?.['repo-tools.role'] + ' · ' + (machineOf(r.address) || 'This computer') + ' · ' + r.labels?.['repo-tools.agent'])), (value, cx) => {
           this.active = value;
           cx.notify();
         }))
