@@ -67,6 +67,20 @@ class Installer(unittest.TestCase):
             self.run_install("--apply")
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_skills_install_for_each_provider_and_preserve_user_edits(self):
+        skill = self.source / "skills/bollard-tests/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("---\nname: bollard-tests\ndescription: Run checks\n---\nUse work tests.\n")
+        self.run_install("--apply")
+        for provider in (".codex", ".claude", ".cursor"):
+            target = self.home / provider / "skills/bollard-tests/SKILL.md"
+            self.assertEqual(target.read_text(), skill.read_text())
+        self.run_install("--verify")
+        target.write_text("Personal changes")
+        with self.assertRaisesRegex(SystemExit, "reconcile first"):
+            self.run_install("--apply")
+        self.assertEqual(target.read_text(), "Personal changes")
+
     def test_missing_dependencies_block_apply_before_writes(self):
         with patch.object(I, "check_dependencies", return_value=False):
             with self.assertRaisesRegex(SystemExit, "prerequisites"):

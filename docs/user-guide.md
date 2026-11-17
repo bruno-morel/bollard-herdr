@@ -483,3 +483,34 @@ resume, including the resume picker; installing an update never interrupts a
 running agent or rewrites existing chat history.
 
 Settings: [Codex configuration reference](https://developers.openai.com/codex/config-reference/).
+
+### Workflow skills in Heeler
+
+Open a managed agent in Heeler, open **Skills** from its action menu (or type
+`/` in Chat), select a skill and send it as a request:
+
+| Skill | Result |
+| --- | --- |
+| `bollard-handoff` | Update durable context and build the current stream's implementation handoff; keep the current role. |
+| `bollard-tests` | Inspect/run saved project checks, or use the existing first-run child when checks are missing. |
+| `bollard-review` | Check readiness and launch the independent reviewer, preserving subscription settings and review guards. |
+
+Add “status only” to Tests or Review to inspect existing results without starting
+a run. Codex invokes skills with `$bollard-tests`; Claude and Cursor use their
+skill slash menus. These are requests handled by the selected agent, not direct
+iPhone buttons. They consume the selected agent's normal conversation usage;
+a configured test rerun itself makes no model call, and review uses its selected
+independent provider. They do not auto-approve commands or authorize unrelated
+fixes, commits, pushes or role changes.
+
+Use an idle agent, or wait for a safe task boundary. Do not stop a busy agent just
+to use a skill. A review waits for stable source rather than interrupting another
+agent that is editing it. The first-test helper follows existing Codex/Cursor
+selection, without spending Claude review allowance on setup.
+
+The installer copies the same three maintained skills into `~/.codex/skills`,
+`~/.claude/skills` and `~/.cursor/skills` on the host running the agent. Reopen
+Heeler's Skills picker to refresh discovery. If an already-running agent has
+cached its skill list, wait for its next normal restart/resume; do not interrupt
+it. Installing skills does not alter existing conversations. A custom agent
+config home may need the skills installed there separately.

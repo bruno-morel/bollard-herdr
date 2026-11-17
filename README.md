@@ -64,6 +64,7 @@ on the machine where you intend to run them; see the setup guide.
 | Checkpoint a conversation or delegate scoped work | [Actions & helpers](docs/user-guide.md#actions-and-helpers) |
 | Check agent activity, quotas, containers and Git status | [Information rail](docs/user-guide.md#information-rail) |
 | Continue the same conversations from a terminal or phone | [TUI guide](docs/user-guide.md#terminal-and-phone) |
+| Trigger handoff, tests and review from Heeler’s Skills menu | [Workflow skills](docs/user-guide.md#workflow-skills-in-heeler) |
 
 **[Full user guide: every control, organized by panel →](docs/user-guide.md)**
 

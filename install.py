@@ -58,6 +58,11 @@ def atomic_write(path, data, mode):
 
 
 def targets(profile, home):
+    # Host-local skills: Heeler discovers these through the selected agent.
+    # One maintained source, installed into each provider's native skill root.
+    for source in sorted((SOURCE / "skills").glob("*/SKILL.md")):
+        for provider in (".codex", ".claude", ".cursor"):
+            yield source, home / provider / "skills" / source.parent.name / source.name
     for source in sorted((SOURCE / "bin").rglob("*")):
         if source.is_file() and "__pycache__" not in source.parts and source.suffix != ".pyc":
             yield source, home / ".local/bin" / source.relative_to(SOURCE / "bin")

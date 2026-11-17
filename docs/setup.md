@@ -242,3 +242,13 @@ its current task and resume that saved conversation from the desktop picker to
 apply the startup fix. Do not create a new conversation just to change colors.
 Switching a viewer between light and dark after launch still depends on the
 agent’s support for live color changes.
+
+### Heeler workflow skills
+
+Normal `install.py` profiles also install the maintained handoff, tests and review
+skills for Codex, Claude and Cursor on that machine. Install on the remote agent
+host as well as the laptop when using SSH. In Heeler, open the agent's Skills
+menu and choose `bollard-handoff`, `bollard-tests` or `bollard-review`.
+See [workflow skills](user-guide.md#workflow-skills-in-heeler) for invocation,
+status-only requests and safe use with busy conversations. No agent is restarted
+and no reviewer is called during installation.
