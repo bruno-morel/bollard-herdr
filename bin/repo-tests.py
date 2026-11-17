@@ -123,7 +123,7 @@ def first(ctx,target=None,requested=None):
         space=labels.get('herdr.space') or 'stream-'+key+'-'+stream
         childlabels={'repo-tools.repo':key,'repo-tools.stream':stream,'repo-tools.checkout':str(root),'repo-tools.role':'helper',
             'repo-tools.agent':name,'repo-tools.task':'first-tests','herdr.space':space,'herdr.tab':space+'-first-tests-'+token[:4]}
-        argv=['run','--bg','--keep','--parent',target,'--outlive-parent','--no-notify','--name','tests-setup-'+token,'--cwd',str(root)]
+        argv=['run','--bg','--parent',target,'--outlive-parent','--no-notify','--name','tests-setup-'+token,'--cwd',str(root)]
         for k,v in childlabels.items(): argv+=['--label',k+'='+v]
         try: hc(*argv,'--',sys.executable,str(BIN/'repo-tests.py'),'_first-worker',stream,token)
         except Exception:
@@ -184,9 +184,7 @@ def first_worker(stream,token):
         except (RuntimeError,OSError,ValueError,sp.SubprocessError) as e:
             s.update(state='incomplete',message=str(e),finished=R.now());tick();print(s['message'],flush=True)
     if ready: worker(stream,token)
-    if sys.stdin.isatty():
-        print('\nFirst tests finished. This helper pane stays open; the main conversation was not interrupted.',flush=True)
-        os.execv('/bin/zsh',['zsh','-l'])
+    print('\nFirst tests finished. Results remain in Tests and terminal history.',flush=True)
 
 
 def failure_prompt(s):
@@ -250,7 +248,7 @@ def launch(ctx):
             s=dict(state='queued',token=token,stream=stream,root=str(root),head=R.git(root,'rev-parse','HEAD'),fingerprint=fingerprint(root,stream,c),config=c,config_path=path,results=[],heartbeat=time.time(),started=R.now())
             R.write(runtime/'state.json',s)
         labels={'repo-tools.repo':key,'repo-tools.stream':stream,'repo-tools.checkout':str(root),'repo-tools.role':'tests','herdr.space':'stream-'+key+'-'+stream,'herdr.tab':'stream-'+key+'-'+stream+'-tests'}
-        argv=['run','--bg','--keep','--no-parent','--name','tests-'+key[:8]+'-'+token,'--cwd',str(root)]
+        argv=['run','--bg','--no-parent','--name','tests-'+key[:8]+'-'+token,'--cwd',str(root)]
         for k,v in labels.items():argv+=['--label',k+'='+v]
         # Launch errors can be ambiguous; do not silently retry a possibly started command.
         try:

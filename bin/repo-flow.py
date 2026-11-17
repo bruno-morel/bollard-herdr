@@ -597,7 +597,6 @@ def launch(args):
             "hc",
             "run",
             "--bg",
-            "--keep",
             "--no-parent",
             "--no-notify",
             "--name",
@@ -652,9 +651,7 @@ def worker(runtime, token):
             flush=True,
         )
         return
-    print("\nWorkflow stopped. Agents and this pane remain available.", flush=True)
-    if sys.stdin.isatty():
-        os.execv("/bin/zsh", ["zsh", "-l"])
+    print("\nWorkflow stopped. Details and retry remain available in the workflow panel.", flush=True)
 
 
 def helper(args):

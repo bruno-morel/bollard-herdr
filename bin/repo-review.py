@@ -546,7 +546,7 @@ def launch(root,stream,runtime,packet,key,args):
             space=next(iter(spaces),'stream-'+key+'-'+stream)
             labels={'herdr.space':space,'herdr.tab':space+'-review','repo-tools.repo':key,'repo-tools.stream':stream,
                     'repo-tools.role':'review','repo-tools.checkout':str(root),'repo-tools.agent':reviewer}
-            argv=['hc','run','--bg','--keep','--no-parent','--no-notify','--cwd',str(root),'--name','review-'+key[:8]+'-'+token[:10]]
+            argv=['hc','run','--bg','--no-parent','--no-notify','--cwd',str(root),'--name','review-'+key[:8]+'-'+token[:10]]
             for k,v in labels.items(): argv+=['--label',k+'='+v]
             argv+=['--',sys.executable,str(BIN/'repo-review.py'),'_pane',str(runtime),token]
             run(argv,timeout=20)
@@ -562,9 +562,7 @@ def main():
         if action=='_check':
             job=read(Path(sys.argv[2])); r=check(Path(job['root']),job['config'],sys.argv[3],Path(job['artifacts']),sys.argv[4]);write(Path(job['artifacts'])/('check-'+sys.argv[4]+'.json'),r);return
         worker(Path(sys.argv[2]),sys.argv[3])
-        if sys.stdin.isatty():
-            print('\nReview finished. This pane stays open. Use work review --status or --follow-up when ready.',flush=True)
-            os.execv('/bin/zsh',['zsh','-l'])
+        print('\nReview finished. Results remain in Review and terminal history.',flush=True)
         return
     p=argparse.ArgumentParser(prog='work review',description='Independent review: Claude (default), Codex or Cursor; subscription-governed reviews, 20 minutes per call. Claude uses Sonnet/medium/24 turns. Help/status/prepare never call a model.')
     p.add_argument('stream',nargs='?'); p.add_argument('--base',help='explicit comparison branch, saved to review inputs')

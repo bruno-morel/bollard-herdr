@@ -88,7 +88,7 @@ def request(T, ctx, target):
             job['message']='Reusing completed diagnosis; waiting for the lead to become available.'
         T.R.write(runtime/'repair.json',job)
         space = labels.get('herdr.space') or 'stream-'+key+'-'+stream
-        argv = ['run','--bg','--keep','--parent',target,'--outlive-parent','--no-notify',
+        argv = ['run','--bg','--parent',target,'--outlive-parent','--no-notify',
                 '--name','test-repair-'+uuid.uuid4().hex[:12],'--cwd',str(root)]
         tags = {'repo-tools.repo':key,'repo-tools.stream':stream,'repo-tools.role':'helper',
                 'repo-tools.checkout':str(root),'repo-tools.agent':name,'repo-tools.task':'test-repair',

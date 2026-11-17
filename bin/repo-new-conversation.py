@@ -425,7 +425,6 @@ def launch_worker(root, stream, job):
     args = [
         "run",
         "--bg",
-        "--keep",
         "--no-parent",
         "--no-notify",
         "--name",

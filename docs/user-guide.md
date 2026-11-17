@@ -321,8 +321,12 @@ never interrupts them. Reattaching a viewer alone does not update the running ag
 For Heeler push notifications, install its **Host Helper** from the host's
 herdr-core settings and enable the host under **Settings → Notifications**.
 The launcher keeps the agent's native status reports; it does not fabricate
-working, blocked or done notifications. A retained review shell can still appear
-in Terminals after its review has finished.
+working, blocked or done notifications. Finite reviews, test runs, test-setup helpers, checkpoints and workflow jobs
+exit when finished instead of leaving recovery shells. Their saved results and
+finished terminal history remain available (`hc ls --all`). Interactive Studio,
+Work and helper conversations keep their menus/shells; an agent reporting Done
+is not considered dead and is never automatically closed. Older retained job
+shells require a one-time inspection before closure.
 
 
 Run `repo-tui` for Bollard's terminal interface. On installations with the optional
