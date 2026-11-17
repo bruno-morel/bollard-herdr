@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess as sp
 import sys
+from repo_process import run_foreground
 from repo_sessions import resolve as resolve_session, setup as setup_sessions
 
 AGENTS = ('codex', 'claude', 'cursor')
@@ -398,7 +399,7 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                        stdout=sp.DEVNULL, stderr=sp.DEVNULL)
             print('Starting ' + name + ' in ' + role.upper() + ' role.', flush=True)
             try:
-                result = sp.run(args, cwd=root, env=agent_environment(name))
+                result = run_foreground(args, cwd=root, env=agent_environment(name))
             except OSError:
                 if pending_take is not None:
                     takeover.write_text(pending_take)

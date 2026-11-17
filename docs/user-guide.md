@@ -308,6 +308,23 @@ setup instructions are listed in the [agent guide](agents.md).
 
 ## Terminal and phone
 
+### Heeler and native mobile clients
+
+Connect Heeler to the machine's **herdr-core** server to access the same
+conversations. Bollard gives the selected CLI its own foreground terminal job,
+so clients can identify the agent while our launcher keeps the role prompt,
+stream lock and resume menu. Exiting or updating the agent returns terminal
+control to that menu; the menu itself is not a running agent. Existing sessions
+need their next normal agent exit/resume to pick up this change—installation
+never interrupts them. Reattaching a viewer alone does not update the running agent.
+
+For Heeler push notifications, install its **Host Helper** from the host's
+herdr-core settings and enable the host under **Settings → Notifications**.
+The launcher keeps the agent's native status reports; it does not fabricate
+working, blocked or done notifications. A retained review shell can still appear
+in Terminals after its review has finished.
+
+
 Run `repo-tui` for Bollard's terminal interface. On installations with the optional
 Herdr launcher wrapper, plain `herdr` opens it. Desktop and terminal attach to the
 same remote terminals; they do not copy conversations onto the phone or laptop.
