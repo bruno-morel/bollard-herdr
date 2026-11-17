@@ -26,3 +26,16 @@ test('recovered chat uses the surviving information pane weight scale',()=>{
   assert.equal(ensureConversation(tree,'top').size.weight,weight*2);
  }
 });
+
+test('information column fills its weighted split without changing the user divider',async()=>{
+ const {fillInfoColumn}=await import('../../desktop/shared/stream-tree.js');
+ const info={id:'top-info',size:{weight:.24},min:210,max:430,hidden:true};
+ const chat={id:'top-conversation',size:{weight:.76},min:240};
+ const tree={id:'top-body',children:[chat,info]};
+ assert.equal(fillInfoColumn(tree,'top'),true);
+ assert.equal(info.max,undefined);
+ assert.equal(info.min,210);assert.equal(info.hidden,true);
+ assert.equal(info.size.weight,.24);assert.equal(chat.size.weight,.76);
+ assert.equal(fillInfoColumn(tree,'top'),false);
+ assert.equal(fillInfoColumn(tree,'absent'),false);
+});

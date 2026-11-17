@@ -18,7 +18,8 @@ import {
   withoutLaneState,
   laneIds,
   findNode,
-  ensureConversation
+  ensureConversation,
+  fillInfoColumn
 } from './stream-tree.js';
 import {
   COMPLETE,
@@ -447,6 +448,7 @@ export default class Portrait extends View {
         this.error = 'Missing view: ' + lane + '-views';
         continue;
       }
+      if(fillInfoColumn(copy,lane))changed=true;
       const side = find(copy, lane + '-info');
       if (side && side.hidden !== !(shared(INFO) || {})[lane]) {
         side.hidden = !(shared(INFO) || {})[lane];

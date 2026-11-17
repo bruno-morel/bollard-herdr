@@ -58,3 +58,11 @@ export function ensureConversation(tree, lane) {
  parent.children=[node,...(parent.children||[])];
  return node;
 }
+
+// Weighted columns must fill their allocation; a max leaves trailing space
+// because Herdr does not redistribute the capped portion to their sibling.
+export function fillInfoColumn(tree,lane){
+ const side=findNode(tree,lane+'-info');
+ if(!side?.size?.weight || side.max===undefined)return false;
+ delete side.max;return true;
+}

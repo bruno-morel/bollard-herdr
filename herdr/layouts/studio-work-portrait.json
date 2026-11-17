@@ -221,7 +221,6 @@
                         "weight": 0.23999999463558197
                       },
                       "min": 210,
-                      "max": 430,
                       "hidden": true,
                       "background": "chrome",
                       "radius": 8
@@ -391,7 +390,6 @@
                         "weight": 0.23999999463558197
                       },
                       "min": 210,
-                      "max": 430,
                       "hidden": true,
                       "background": "chrome",
                       "radius": 8
