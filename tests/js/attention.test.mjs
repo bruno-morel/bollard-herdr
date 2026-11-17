@@ -14,14 +14,16 @@ test('duplicates across windows count once; helpers preserve parent and host',()
  assert.deepEqual(results[0].context,{terminal:'box/t2',parent:'box/t1',on:'box',cwd:'/repo',stream:'demo',role:'helper'});
 });
 
-test('missing window reports a message instead of opening a preview',async()=>{
+test('missing window offers placement without opening another conversation',async()=>{
  const messages=[];
  const source=src.replace("export async function focusAttention(row)","export async function focusAttention(row)");
  globalThis.__attentionMessages=messages;
- const prefix="const exec=async()=>({code:0,stdout:JSON.stringify({found:false})});const appHome=()=>'/app';const notify=x=>globalThis.__attentionMessages.push(x);";
+ const prefix="const exec=async()=>({code:0,stdout:JSON.stringify({found:false})});const appHome=()=>'/app';const openOverlay=x=>globalThis.__attentionMessages.push(x);";
  const mod=await import('data:text/javascript;base64,'+Buffer.from(prefix+source).toString('base64'));
  await mod.focusAttention({address:'box/t1',context:{terminal:'box/t1'}});
- assert.equal(messages[0].title,'No open window for this agent');
+ assert.equal(messages[0].props.kind,'layout-menu');
+ assert.equal(messages[0].props.attention.address,'box/t1');
+ assert.equal(messages[0].props.operation,'add');
  delete globalThis.__attentionMessages;
 });
 
@@ -39,4 +41,18 @@ test('multi-agent selection queues the exact target before closing its own menu'
  calls.length=0;mod.requestAttention(selected);
  assert.equal(calls.length,1);
  delete globalThis.__attentionCalls;
+});
+
+test('an existing window is focused without offering another placement',async()=>{
+ const prefix="const exec=async()=>({code:0,stdout:JSON.stringify({found:true})});const appHome=()=>'/app';const openOverlay=()=>{throw Error('unexpected picker')};const notify=()=>{throw Error('unexpected notification')};";
+ const mod=await import('data:text/javascript;base64,'+Buffer.from(prefix+src).toString('base64'));
+ await mod.focusAttention({context:{terminal:'box/t1'}});
+});
+
+test('attention picker includes the exact helper without listing unrelated helpers',async()=>{
+ const source=readFileSync(new URL('../../herdr/mods/repo-stream-picker/model.js',import.meta.url),'utf8');
+ const {running}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ const helper=id=>row(id,'blocked',{labels:{'repo-tools.role':'helper','repo-tools.stream':'example'}});
+ assert.deepEqual(running([helper('box/t1'),helper('box/t2')],'box/t2').map(r=>r.address),['box/t2']);
+ assert.deepEqual(running([helper('box/t2')]),[]);
 });

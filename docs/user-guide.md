@@ -514,3 +514,19 @@ Heeler's Skills picker to refresh discovery. If an already-running agent has
 cached its skill list, wait for its next normal restart/resume; do not interrupt
 it. Installing skills does not alter existing conversations. A custom agent
 config home may need the skills installed there separately.
+
+### Resuming without another startup task
+
+Resuming a saved conversation restores its history without automatically sending
+another role prompt or asking the agent to reread the whole handoff. Branch,
+checkout and handoff identity checks still run in the launcher. New conversations
+receive the complete current role instructions. Explicit handoff preparation and
+implementation workflow requests still send their instructions; resuming alone
+never starts those tasks. To adopt changed role instructions, use the checkpointed
+new-conversation or Hand off to flow.
+
+When an attention alert has no matching open desktop window, it offers the same
+placement choices as Add stream: above/below or beside the current layout, split
+an existing stream, or a separate window. The waiting conversation is preselected
+in the shared picker. Opening it attaches to that conversation without starting
+another agent. Existing windows are brought forward as before.

@@ -622,7 +622,9 @@ export default class Portrait extends View {
             const template = ids[0];
             closeOverlay(p.overlay);
             picker(template, {
-              newWindow: true
+              newWindow: true,
+              context: p.attention?.context,
+              activeTerminal: p.attention?.address
             });
           }, {
             icon: 'external'
@@ -873,7 +875,9 @@ export default class Portrait extends View {
         axis,
         target
       },
-      fresh: true
+      fresh: !props().attention,
+      context: props().attention?.context,
+      activeTerminal: props().attention?.address
     });
   }
   pruneEmpty(cx) {

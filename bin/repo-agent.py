@@ -365,7 +365,9 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
             ):
                 fail('build the handoff first: studio handoff')
             f.write_text(name + '\n')
-            text = prompt(root, stream, role)
+            # Ordinary resumes restore history without submitting a model turn.
+            explicit_resume_task = bool(task_file or take or (role == 'work' and f.with_suffix('.take').is_file()))
+            text = prompt(root, stream, role) if resume is None or explicit_resume_task else None
             if task_file:
                 task_path = Path(task_file)
                 if task_path.is_symlink(): fail('workflow task must not be a symlink')
@@ -376,7 +378,7 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                 text += '\nEXPLICIT USER WORKFLOW TASK (supersedes startup wait only):\n' + task_path.read_text()
             takeover = f.with_suffix('.take')
             pending_take = takeover.read_text() if role == 'work' and takeover.is_file() else None
-            if pending_take is not None and resume == '':
+            if explicit_resume_task and resume == '':
                 fail('pending handoff preparation: use a new Work chat or an explicit resume ID')
             if pending_take is not None:
                 takeover.unlink()
@@ -394,7 +396,9 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                 # An empty ID opens the native picker. Never choose --last/--continue:
                 # Studio and Work intentionally share a checkout, not a conversation.
                 if resume:
-                    args += [resume, text]
+                    args += [resume]
+                    if text is not None:
+                        args.append(text)
                 print('Select the saved ' + role.upper() + ' conversation for ' + stream + '.', flush=True)
             if name == 'codex':
                 # Presentation only; apply equally to new chats and resume pickers.

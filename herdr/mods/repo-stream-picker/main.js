@@ -63,7 +63,7 @@ export default class StreamPicker extends View {
     this.on = loc?.on ?? p.on ?? null;
     this.role = p.role || loc?.role || 'studio';
     this.agent = 'codex';
-    this.active = running(terminals()).find(r => machineOf(r.address) === this.on && (r.labels['repo-tools.checkout'] || r.cwd) === loc?.cwd && r.labels['repo-tools.role'] === this.role)?.address || running(terminals())[0]?.address || null;
+    this.active = running(terminals(), props()?.activeTerminal).find(r => r.address === p.activeTerminal)?.address || running(terminals(), props()?.activeTerminal).find(r => machineOf(r.address) === this.on && (r.labels['repo-tools.checkout'] || r.cwd) === loc?.cwd && r.labels['repo-tools.role'] === this.role)?.address || running(terminals(), props()?.activeTerminal)[0]?.address || null;
     this.mode = p.fresh ? 'new' : this.active ? 'existing' : 'new';
     if (this.mode === 'new') this.active = null;
     this.advanced = false;
@@ -122,7 +122,7 @@ export default class StreamPicker extends View {
   }
   loadActiveNames(cx) {
     cx.spawn(async cx => {
-      await Promise.allSettled(running(terminals()).map(async row => {
+      await Promise.allSettled(running(terminals(), props()?.activeTerminal).map(async row => {
         const r = await exec('repo-streams.py', ['catalog', '--repo', row.labels['repo-tools.checkout'] || row.cwd], {
           on: machineOf(row.address)
         });
@@ -198,7 +198,7 @@ export default class StreamPicker extends View {
     });
   }
   candidates() {
-    return [...new Set([...running(terminals()).filter(r => machineOf(r.address) === this.on).map(r => r.labels['repo-tools.checkout'] || r.cwd), ...spaces().filter(s => s.machine === this.on && s.folder && s.folder !== '~').map(s => s.folder)])].slice(0, 8);
+    return [...new Set([...running(terminals(), props()?.activeTerminal).filter(r => machineOf(r.address) === this.on).map(r => r.labels['repo-tools.checkout'] || r.cwd), ...spaces().filter(s => s.machine === this.on && s.folder && s.folder !== '~').map(s => s.folder)])].slice(0, 8);
   }
   discoverRepos(cx, token) {
     const on = this.on,
@@ -306,7 +306,7 @@ export default class StreamPicker extends View {
           return;
         }
         if (this.active) {
-          const row = running(terminals()).find(t => t.address === this.active);
+          const row = running(terminals(), props()?.activeTerminal).find(t => t.address === this.active);
           if (!row) throw Error('That conversation has ended. Choose its worktree to reopen it.');
           const cwd = row.labels['repo-tools.checkout'] || row.cwd,
             on = machineOf(row.address);
@@ -407,7 +407,7 @@ export default class StreamPicker extends View {
   render(cx) {
     const t = theme(),
       p = props() || {},
-      all = running(terminals()),
+      all = running(terminals(), props()?.activeTerminal),
       current = all.find(r => r.address === this.active),
       data = this.data;
     const caption = s => div().text_size(11).text_color(t.muted).child(s);
