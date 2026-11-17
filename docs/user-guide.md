@@ -469,3 +469,17 @@ it remotely. Test it on the next normal agent task rather than interrupting a
 working conversation. Live Activity shows ongoing agent status; notification
 taps open the agent that needs you. Delivery depends on connectivity and iOS
 notification/Focus settings. Existing Ubiquiti Teleport access is sufficient.
+
+### Quieter Codex conversations
+
+Bollard launches Codex with onboarding tips and informational server-version
+notices disabled (`tui.show_tooltips=false`,
+`tui.show_server_version_notice=false`). New conversations acknowledge their
+role and readiness in one line, with blockers still reported. Role instructions
+and handoff context remain intact; Codex may still display the initial prompt
+and normal tool activity. Approvals, errors, progress and notifications remain
+visible. These presentation defaults apply on the next normal agent start or
+resume, including the resume picker; installing an update never interrupts a
+running agent or rewrites existing chat history.
+
+Settings: [Codex configuration reference](https://developers.openai.com/codex/config-reference/).

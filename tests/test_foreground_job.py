@@ -74,8 +74,14 @@ class ForegroundJob(unittest.TestCase):
                     self.assertEqual(os.waitstatus_to_exitcode(status), 0, output.decode())
                     break
             if not finished:
-                waited, status = os.waitpid(pid, os.WNOHANG)
-                finished = bool(waited)
+                # PTY EOF can arrive just before the child becomes reapable.
+                # Keep the same deadline instead of failing on that scheduling race.
+                while time.monotonic() < deadline:
+                    waited, status = os.waitpid(pid, os.WNOHANG)
+                    if waited:
+                        finished = True
+                        break
+                    time.sleep(.01)
                 self.assertTrue(finished, output.decode())
                 self.assertEqual(os.waitstatus_to_exitcode(status), 0, output.decode())
             self.assertTrue(sent_menu, output.decode())

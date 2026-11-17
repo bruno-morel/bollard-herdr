@@ -133,8 +133,10 @@ Follow the file-review instructions for this session when asked to show the plan
         "The user invoked work take. Carry out HANDOFF PREPARATION now, then stop "
         "and wait for the user's go-ahead before implementation."
         if taking else
-        "For this startup message, read the relevant context, briefly confirm your role, "
-        "branch and readiness, then wait for the user's task. Do not begin implementation."
+        "For this startup message, read the relevant context, then confirm your role, "
+        "branch and readiness in one short line. Do not recap the instructions or list "
+        "the files you read. Surface any blocker or conflict. Then wait for the user's "
+        "task. Do not begin implementation."
     )
     p = packet(root, stream)
     implementation = p/'implementation.md'
@@ -394,6 +396,11 @@ def run_agent(root, stream, role, requested, resume=None, once=False, take=False
                 if resume:
                     args += [resume, text]
                 print('Select the saved ' + role.upper() + ' conversation for ' + stream + '.', flush=True)
+            if name == 'codex':
+                # Presentation only; apply equally to new chats and resume pickers.
+                # Keep approvals, errors, status reports and notifications intact.
+                args[1:1] = ['-c', 'tui.show_tooltips=false',
+                             '-c', 'tui.show_server_version_notice=false']
             if once and os.environ.get('HC_TERMINAL_ID') and shutil.which('hc'):
                 sp.run(['hc', 'label', os.environ['HC_TERMINAL_ID'], 'repo-tools.agent='+name, 'repo-tools.profile='+selected_role(root, f, role)[0]],
                        stdout=sp.DEVNULL, stderr=sp.DEVNULL)
