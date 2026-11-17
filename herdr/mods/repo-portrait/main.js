@@ -1,3 +1,4 @@
+import Move, {receiveMove} from './move.js';
 import {activity} from './activity.js';
 import {attentionRows,focusAttention,requestAttention} from './attention.js';
 import {
@@ -179,6 +180,7 @@ export default class Portrait extends View {
     this.splitAxis = null;
     this.separateWindow = false;
     const panel = {
+      move: Move,
       docker: Docker,
       tests: Tests,
       info: Info,
@@ -196,6 +198,7 @@ export default class Portrait extends View {
       cx.spawn(async cx => {
         for (;;) {
           const cmd = await nextCommand();
+          if(cmd.startsWith('receive-move:')){receiveMove(JSON.parse(decodeURIComponent(cmd.slice(13))));cx.notify();continue;}
           const accountCommand = /^show-account-(claude|cursor)$/.exec(cmd);
           if (accountCommand) {
             const row = terminals().filter(t => t.state === 'live' && t.labels?.['repo-tools.account'] === accountCommand[1]).at(-1);
@@ -252,6 +255,7 @@ export default class Portrait extends View {
             this.pruneEmpty(cx);
             continue;
           }
+          if(cmd==='move-stream'){openOverlay({mod:'repo-portrait',kind:'popup',width:400,props:{kind:'move'}});continue;}
           if (cmd === 'add-stream' || cmd === 'remove-stream') {
             openOverlay({
               mod: 'repo-portrait',
@@ -568,6 +572,7 @@ export default class Portrait extends View {
           icon: 'plus',
           dropdown: true
         }))
+        .child(control('portrait-move', 'Move stream', () => openOverlay({mod:'repo-portrait',kind:'popup',width:400,props:{kind:'move'}}), {icon:'columns',dropdown:true}))
         .child(control('portrait-remove', 'Remove stream view', () => openOverlay({
           mod: 'repo-portrait',
           kind: 'popup',

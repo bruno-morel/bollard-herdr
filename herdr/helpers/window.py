@@ -206,10 +206,70 @@ def focus_agent(source,context):
  return {'found':False,'terminal':terminal}
 
 
+def list_windows(source):
+ origin=Path((load(source/'repo-window.json',{}) or {}).get('origin',str(source))).resolve()
+ result=[]
+ executable=shutil.which('herdr-app')
+ if not executable:raise RuntimeError('Herdr desktop launcher is unavailable.')
+ for home in [origin,*sorted((origin/'screens').glob('*'))]:
+  if home==source or not home.is_dir() or not (home/'herdr-app.sock').is_socket():continue
+  if home!=origin and (load(home/'repo-window.json',{}) or {}).get('origin')!=str(origin):continue
+  try:
+   status=sp.run([executable,'status'],env=dict(os.environ,HERDR_APP_HOME=str(home)),capture_output=True,text=True,timeout=2)
+   if status.returncode:continue
+  except sp.TimeoutExpired:continue
+  state=load(home/'shared.json',{})
+  rows=[{'id':key,'label':(c.get('repo') or 'Repository')+' / '+(c.get('stream') or 'Empty')} for key,c in state.get('repo.portrait.lanes',{}).items() if c]
+  if rows:result.append({'home':str(home),'title':' · '.join(r['label'] for r in rows),'lanes':rows})
+ return result
+
+def move_view(source,lane,packet):
+ if packet.get('lane')!=lane or not re.fullmatch(r'[a-z0-9]+',packet.get('id','')):raise RuntimeError('Invalid move request.')
+ context=packet.get('state',{}).get('repo.portrait.lanes')
+ if not context:raise RuntimeError('Source stream is unavailable.')
+ if packet.get('destination')=='new':
+  destination,context=prepare(source,lane,context)
+  launch_window(destination,context)
+  state=load(destination/'shared.json',{})
+  candidates=[k for k,c in state.get('repo.portrait.lanes',{}).items() if c.get('terminal')==packet.get('terminal')]
+  if len(candidates)!=1:raise RuntimeError('Destination has changed; original view preserved.')
+  packet=dict(packet,replace=candidates[0])
+ else:
+  windows=list_windows(source)
+  match=next((w for w in windows if w['home']==packet.get('destination')),None)
+  if not match:raise RuntimeError('Destination window is closed; original view preserved.')
+  if packet.get('placement',{}).get('target') not in [r['id'] for r in match['lanes']]:raise RuntimeError('Destination stream has changed; original view preserved.')
+  destination=Path(match['home'])
+ executable=shutil.which('herdr-app')
+ env=dict(os.environ,HERDR_APP_HOME=str(destination))
+ command='repo-portrait.receive-move:'+quote(json.dumps(packet),safe='')
+ sent=sp.run([executable,'do',command],env=env,capture_output=True,text=True,timeout=5)
+ if sent.returncode:raise RuntimeError(sent.stderr or sent.stdout or 'Could not open destination; original preserved.')
+ deadline=time.monotonic()+10
+ while time.monotonic()<deadline:
+  state=load(destination/'shared.json',{})
+  ack=state.get('repo.portrait.move-result',{})
+  if ack.get('id')==packet['id']:
+   if ack.get('error'):raise RuntimeError(ack['error'])
+   layout_name=state.get('layout','')
+   if Path(layout_name).name!=layout_name:raise RuntimeError('Invalid destination layout.')
+   tree=load(destination/'layouts'/(layout_name+'.json'),{})
+   node=find(tree,ack['lane']+'-conversation')
+   if node and node.get('content',{}).get('terminal')==packet.get('terminal'):
+    return {'moved':True,'home':str(destination),'lane':ack['lane']}
+  time.sleep(.1)
+ raise RuntimeError('Destination did not confirm the conversation. Original view preserved; check the destination before retrying.')
+
+
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['open','focus-agent']);p.add_argument('--source',type=Path,required=True);p.add_argument('--lane');p.add_argument('--context',type=json.loads);a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['open','focus-agent','list-windows','move-view']);p.add_argument('--source',type=Path,required=True);p.add_argument('--lane');p.add_argument('--context',type=json.loads);a=p.parse_args()
  if a.action=='open' and not a.lane:p.error('--lane is required for open')
- print(json.dumps(focus_agent(a.source.resolve(),a.context or {}) if a.action=='focus-agent' else open_window(a.source.resolve(),a.lane,a.context)))
+ source=a.source.resolve()
+ if a.action=='list-windows':result=list_windows(source)
+ elif a.action=='move-view':result=move_view(source,a.lane,a.context or {})
+ elif a.action=='focus-agent':result=focus_agent(source,a.context or {})
+ else:result=open_window(source,a.lane,a.context)
+ print(json.dumps(result))
 if __name__=='__main__':
  os.umask(0o077)
  try:main()

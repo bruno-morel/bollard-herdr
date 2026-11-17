@@ -65,3 +65,29 @@ export function fillInfoColumn(tree,lane){
  if(!side?.size?.weight || side.max===undefined)return false;
  delete side.max;return true;
 }
+
+// Insert a complete stream view, retaining its tools, dividers and terminal.
+export function placeLane(tree, node, {target, position='below'}={}) {
+ if(!['above','below','left','right'].includes(position))throw Error('Choose a placement.');
+ const copy=clone(tree),root=findNode(copy,'portrait-streams');
+ if(!root || !target || !findNode(copy,target+'-lane'))throw Error('Destination stream is no longer open.');
+ if(findNode(copy,node.id))throw Error('This stream view is already in that window.');
+ const fresh=clone(node),axis=['left','right'].includes(position)?'row':'column';
+ function insert(n){for(let i=0;i<(n.children||[]).length;i++){
+  const c=n.children[i];if(c.id===target+'-lane'){
+   const size=c.size;c.size={weight:1};fresh.size={weight:1};
+   n.children[i]={id:'split-'+fresh.id,type:axis,size,gap:8,divider:{width:1,color:'border'},children:['above','left'].includes(position)?[fresh,c]:[c,fresh]};return true;
+  }if(insert(c))return true;
+ }return false;}
+ insert(root);return copy;
+}
+export function moveLane(tree, source, placement){
+ if(source===placement.target)throw Error('Choose another stream to place it beside.');
+ const node=findNode(tree,source+'-lane');if(!node)throw Error('Source stream is no longer open.');
+ return placeLane(removeLane(tree,source),node,placement);
+}
+export function renameLane(node, old, id){
+ const copy=clone(node);
+ function walk(n){if(n.id?.startsWith(old+'-'))n.id=id+n.id.slice(old.length);if(n.active?.startsWith(old+'-'))n.active=id+n.active.slice(old.length);if(n.content?.props?.lane===old)n.content.props.lane=id;for(const c of n.children||[])walk(c);}
+ walk(copy);return copy;
+}

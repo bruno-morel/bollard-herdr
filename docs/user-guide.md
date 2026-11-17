@@ -62,9 +62,18 @@ the right. Changing one view's tool does not change the other stream.
 | Add stream → Beside | Add a view alongside the others. |
 | Split a stream → top/bottom or left/right | Choose which view to split, then choose the conversation for the new slot. |
 | In a separate Herdr window | Pick a stream for a separate desktop window, useful on another display. |
+| Move stream | Move an existing view within this window, into another open window, or into a new window. Choose above, below, left or right of the destination stream. |
 | Remove stream view | Choose a layout slot to remove. This removes the view, not the Git branch or agent. |
 | Repository / stream name | Reopen the picker to change what this slot displays. |
 | Information icon | Show/hide this stream's information rail. |
+
+**Move stream** sits beside **Add stream** in the window bar. With one stream,
+it skips the source selection. The conversation, selected tool, information rail
+and split proportions travel together; agents and worktrees are not restarted or
+changed. Save editor drafts first. For moves between windows, the original view
+is removed only after the destination confirms its conversation binding. If that
+fails, the original remains open. If the source window becomes empty, choose
+whether to close that Herdr instance or keep an empty window.
 
 The attention indicator appears before the window controls. Ordinary idle agents
 are not counted, and the same terminal in multiple views is counted once. Helpers

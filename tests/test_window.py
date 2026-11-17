@@ -88,3 +88,31 @@ class Windows(unittest.TestCase):
         with patch.object(W.ctypes,'CDLL',return_value=service),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=1,stdout='',stderr='Window stayed behind')):
             with self.assertRaisesRegex(RuntimeError,'Window stayed behind'):
                 W.raise_process(12345)
+
+    def test_move_requires_destination_ack_and_saved_terminal_before_success(self):
+        with tempfile.TemporaryDirectory() as d:
+            destination=Path(d)/'destination';destination.mkdir()
+            W.save(destination/'shared.json',{'layout':'view','repo.portrait.move-result':{'id':'abc','lane':'moved-abc'}})
+            W.save(destination/'layouts/view.json',{'id':'moved-abc-conversation','content':{'terminal':'box/t1'}})
+            packet={'id':'abc','lane':'top','destination':str(destination),'terminal':'box/t1','state':{'repo.portrait.lanes':{'stream':'demo'}},'placement':{'target':'bottom'}}
+            with patch.object(W,'list_windows',return_value=[{'home':str(destination),'lanes':[{'id':'bottom'}]}]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0)) as run:
+                result=W.move_view(Path(d),'top',packet)
+            self.assertTrue(result['moved'])
+            self.assertIn('receive-move:',run.call_args.args[0][2])
+            self.assertEqual(run.call_count,1) # no agent restart or source removal
+
+    def test_move_rejects_closed_window_before_sending(self):
+        packet={'id':'abc','lane':'top','destination':'/closed','state':{'repo.portrait.lanes':{'stream':'demo'}}}
+        with patch.object(W,'list_windows',return_value=[]),patch.object(W.sp,'run') as run:
+            with self.assertRaisesRegex(RuntimeError,'closed'):
+                W.move_view(Path('/source'),'top',packet)
+            run.assert_not_called()
+
+    def test_move_preserves_source_when_destination_rejects(self):
+        with tempfile.TemporaryDirectory() as d:
+            destination=Path(d)
+            W.save(destination/'shared.json',{'repo.portrait.move-result':{'id':'abc','error':'Destination changed'}})
+            packet={'id':'abc','lane':'top','destination':d,'state':{'repo.portrait.lanes':{'stream':'demo'}},'placement':{'target':'bottom'}}
+            with patch.object(W,'list_windows',return_value=[{'home':d,'lanes':[{'id':'bottom'}]}]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0)):
+                with self.assertRaisesRegex(RuntimeError,'Destination changed'):
+                    W.move_view(Path('/source'),'top',packet)
