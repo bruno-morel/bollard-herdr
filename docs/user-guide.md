@@ -442,3 +442,30 @@ New repair prompts report stages with `work tests progress <stream> --run <run-i
 runner results establish check outcomes; direct shell tests are not silently
 imported. Logs remain available per check. Hover the stage for extra detail.
 No extra reviewer calls or Claude allowance changes are involved.
+
+### Status, questions and phone Live Activity
+
+Each desktop stream has a small status indicator beside its controls. Hover it
+for the reported connection/agent state and age of the last status report.
+The TUI shows the same status summary in its header. Errors fetching status
+remain visible; this indicator is not a probe of Docker, the VPN or every
+installed dependency. An ended conversation is different from a working agent.
+
+Questions distinguishes **Permission needed**, **Question** and **Input needed**
+when the agent reports that information. It shows the reported message or
+conversation title and opens the originating conversation for the exact prompt.
+It never guesses an answer or approves a command. Desktop agent cards and TUI
+agent/question rows show **Last status … ago**. This is the age of the status
+report, not a task stopwatch: a quiet long-running test is not declared stuck.
+Missing timestamps show as unavailable. These displays reuse existing data and
+refreshes; they do not read more conversation history, call models, restart
+agents or add a monitoring service.
+
+On the iPhone, in **Heeler → Settings → Notifications**, enable your JumpBox
+host, tap it, then enable **Live Activity** (and **Done Notifications** if
+wanted). The host's **herdr-core → Host Helper** page should say the helper is
+running. The phone controls this permission; installing Bollard cannot enable
+it remotely. Test it on the next normal agent task rather than interrupting a
+working conversation. Live Activity shows ongoing agent status; notification
+taps open the agent that needs you. Delivery depends on connectivity and iOS
+notification/Focus settings. Existing Ubiquiti Teleport access is sufficient.

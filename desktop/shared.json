@@ -62,5 +62,8 @@
     "repo-portrait/terminal-display.js",
     "repo-stream-picker/terminal-display.js",
     "repo-workflow/terminal-display.js"
+  ],
+  "activity.js": [
+    "repo-portrait/activity.js"
   ]
 }

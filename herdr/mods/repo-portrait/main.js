@@ -1,3 +1,4 @@
+import {activity} from './activity.js';
 import {attentionRows,focusAttention,requestAttention} from './attention.js';
 import {
   operation,
@@ -751,6 +752,7 @@ export default class Portrait extends View {
     }));
     const tone = interactionTone(relatives(c), lead, shared(COMPLETE)) || (status?.state === 'needs-you' ? 'attention' : null),
       failed = panels => panelFailed(lane, c, panels);
+    const health = activity(lead,Date.now(),(shared('repo.operation-errors')||{})[key]);
     const compact = (this.width || 1500) < 1250;
     return h_flex().id('stream-controls').size_full().px(8).gap(4).items_center().bg(t.chrome).text_color(t.foreground)
       .on_size_change((size, cx) => {
@@ -790,6 +792,7 @@ export default class Portrait extends View {
         compact: true
       })))
       .when(!!(shared('repo.operation-errors') || {})[key], e => e.child(div().text_size(11).text_color(t.blocked).tooltip((shared('repo.operation-errors') || {})[key]).child('⚠ Status unavailable')))
+      .child(div().text_size(10).text_color(health.bad?t.blocked:t.muted).cursor_pointer().on_click(()=>notify({title:health.health,body:health.timing+' · '+health.detail,level:health.bad?'warning':'info'})).tooltip(health.health+' · '+health.timing+'\n'+health.detail).child(health.bad?'⚠':'○'))
       .child(div().flex_1().min_w(8))
       .child(control('view-agent', picked === 'questions' ? 'Questions' : 'Conversation', () => openOverlay({
         mod: 'repo-portrait',

@@ -1,3 +1,4 @@
+import {activity} from './activity.js';
 import {publishedPorts} from './docker-ports.js';
 import {scopedAgents,agentTree,statusKind,memoryReading} from './agent-cards.js';
 import {showAccount} from './account-pane.js';
@@ -57,7 +58,8 @@ export default class Info extends View {
      .child(badge(status,ink).px(5).py(2).text_size(9).flex_none())
      .child(div().flex_1().min_w(0).truncate().text_size(11).child(d?.model||'Model not reported').tooltip(d?.model||'Model not reported'))
      .child(div().flex_none().text_size(10).text_color(colors.violet).child(d?.reasoning||'—').tooltip('Reasoning level · '+(d?.reasoning||'not reported'))))
-    .child(div().text_size(10).truncate().text_color(t.muted).tooltip(r.title||c.stream).child(r.title||c.stream)));
+    .child(div().text_size(10).truncate().text_color(t.muted).tooltip(r.title||c.stream).child(r.title||c.stream))
+    .child(caption(activity(r).timing).tooltip(activity(r).detail)));
   }
   if(!rows.length)content=content.child(caption('No managed agents in this stream.'));
   const flow=(shared('repo.flow-status')||{})[c?.key];if(flow)content=content.child(card('Workflow · '+flow.state,caption(flow.message)));
@@ -147,8 +149,8 @@ export default class Info extends View {
 export class Questions extends View {
  render(){const c=scopedLocation(),t=theme(),rows=relatives(c).filter(r=>state(r)==='blocked'),flow=(shared('repo.flow-status')||{})[c?.key];return v_flex().size_full().min_h(0).bg(toolColors().background).text_color(t.foreground).p(14).gap(10)
  .child(div().text_size(14).font_semibold().child('Questions · '+rows.length+' agent'+(rows.length===1?'':'s')+' awaiting input'))
- .child(caption('Open the originating conversation to read and answer the exact question or approval. No questions are inferred from terminal prose.'))
- .child(v_flex().id('questions-list').flex_1().min_h(0).overflow_y_scrollbar().gap(8).children(rows.map(r=>h_flex().p(10).bg(t.background).rounded(6).gap(10).items_center().child(v_flex().flex_1().child(div().text_size(12).child(r.labels?.['repo-tools.role']||'Agent')).child(caption(r.title||'Needs your input'))).child(button('question-'+r.address,'Open question',()=>run('terminal.peek',{terminal:r.address}),{icon:'question'}))))
+ .child(caption('Questions and permissions stay in their originating conversation. Open one to answer; nothing is approved automatically.'))
+ .child(v_flex().id('questions-list').flex_1().min_h(0).overflow_y_scrollbar().gap(8).children(rows.map(r=>h_flex().p(10).bg(t.background).rounded(6).gap(10).items_center().child(v_flex().flex_1().child(div().text_size(12).child(r.labels?.['repo-tools.role']||'Agent')).child(div().text_size(12).font_semibold().child(activity(r).kind)).child(caption(activity(r).message||r.title||'Open the conversation for the exact prompt')).child(caption(activity(r).timing))).child(button('question-'+r.address,'Open question',()=>run('terminal.peek',{terminal:r.address}),{icon:'question'}))))
  .when(!rows.length,e=>e.child(caption('No agent is currently reporting a blocked state.')))
  .when(flow?.state==='needs-you',e=>e.child(v_flex().p(10).bg(t.background).child(div().text_size(12).font_semibold().child('Workflow needs you')).child(caption(flow.message)))));
  }

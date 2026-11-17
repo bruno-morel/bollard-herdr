@@ -14,7 +14,7 @@ import re
 import repo_stream_picker as W
 from repo_terminal_ui import UI, clean, clipped
 from repo_helper_context import PRESETS
-from repo_tui_present import tree_rows, lines_for, test_line, info_lines
+from repo_tui_present import tree_rows, lines_for, test_line, info_lines, activity
 from repo_tui_common import (
     Backend,
     control,
@@ -1020,7 +1020,7 @@ class Panel:
         self.ui.put(
             0,
             1,
-            title + " · " + W.label(self.row, "role") + " · " + s,
+            title + " · " + W.label(self.row, "role") + " · " + s + " · " + activity(lead, time.time(), self.errors.get("lead"))["health"],
             curses.A_BOLD | self.ui.color(color),
         )
         browser = self.tab.title() if self.tab in ("docs", "files", "git") else "Docs"
@@ -1487,6 +1487,7 @@ class Panel:
             self.index = max(0, min(self.index, len(self.rows) - 1))
             for i, r in enumerate(self.rows[: height // 2]):
                 st = status(r)
+                report = activity(r, time.time())
                 lead = (
                     self.cache.get("metadata")
                     if r["address"] == self.address.rsplit("/", 1)[-1]
@@ -1498,7 +1499,7 @@ class Panel:
                     + " · "
                     + W.label(r, "agent")
                     + " · "
-                    + st
+                    + (report["kind"] if self.tab == "questions" else st)
                 )
                 if lead:
                     line += (
@@ -1516,7 +1517,7 @@ class Panel:
                         3 if st in ("blocked", "done") else 2 if st == "working" else 1
                     ),
                 )
-                self.ui.put(y + i * 2 + 1, 2, r.get("title") or "", curses.A_DIM)
+                self.ui.put(y + i * 2 + 1, 2, report["timing"] + " · " + (report["message"] or r.get("title") or "Open conversation for the exact prompt"), curses.A_DIM)
                 self.click_rows.append((y + i * 2, 1, w - 1, i))
             if not self.rows:
                 self.ui.put(

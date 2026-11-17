@@ -186,3 +186,18 @@ def info_lines(tab, cache, errors=None):
         if len(lines) == 1:
             lines.append(("Working tree clean", 2))
     return lines
+
+
+def activity(row, now, error=""):
+    """Use status reports, never terminal age as task duration."""
+    row = row or {}
+    s = row.get("status") or {}
+    if not isinstance(s, dict):
+        s = {"state": s}
+    state = s.get("state", "unknown")
+    stamp = row.get("status_ms")
+    age = max(0, int(now - stamp / 1000)) if isinstance(stamp, (int, float)) and 0 < stamp <= now * 1000 else None
+    elapsed = (str(age) + "s" if age < 60 else str(age // 60) + "m" if age < 3600 else str(age // 3600) + "h " + str(age % 3600 // 60) + "m") if age is not None else None
+    kind = {"permission": "Permission needed", "question": "Question"}.get(s.get("kind"), "Input needed" if state == "blocked" else state)
+    health = "Status unavailable" if error else "No conversation" if not row else "Conversation ended" if row.get("state") != "live" else "Status not reported" if state == "unknown" else "Agent reported an error" if state in ("error", "failed") else "Status available"
+    return dict(kind=kind, health=health, timing="Last status " + elapsed + " ago" if elapsed else "Status time unavailable", message=s.get("msg") if isinstance(s.get("msg"), str) else "")

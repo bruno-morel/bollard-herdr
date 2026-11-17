@@ -98,7 +98,7 @@ def agents(lead):
         tags=row.get('labels') or {}
         if tags.get('repo-tools.repo')!=labels.get('repo-tools.repo'): continue
         if row.get('state')!='live': continue
-        rows.append({k:row.get(k) for k in ('address','status','state','title','parent','labels','cwd')})
+        rows.append({k:row.get(k) for k in ('address','status','status_ms','state','title','parent','labels','cwd')})
     return dict(agents=rows,lead=lead)
 
 def main():
