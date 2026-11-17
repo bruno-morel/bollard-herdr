@@ -46,9 +46,14 @@ export function ensureConversation(tree, lane) {
  if(existing)return existing;
  const parent=findNode(tree,lane+'-body');
  if(!parent)return null;
+ // Herdr can rescale the surviving sibling's weight when a terminal disappears.
+ // Recover in that same scale instead of mixing a fixed 3 with (say) 31.
+ const info=findNode(parent,lane+'-info');
+ const siblingWeight=info?.size?.weight;
+ const weight=Number.isFinite(siblingWeight)&&siblingWeight>0?siblingWeight*3:3;
  const node={id:lane+'-conversation',type:'block',
   content:{mod:'repo-portrait',props:{kind:'empty',lane}},
-  size:{weight:3},min:240,background:'background',
+  size:{weight},min:240,background:'background',
   border:{width:1,color:'border'},radius:8};
  parent.children=[node,...(parent.children||[])];
  return node;
