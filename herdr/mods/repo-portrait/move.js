@@ -4,7 +4,7 @@ import {shared,setShared,layout,run,exec,appHome,theme,props,closeOverlay,termin
 import {button} from './ui.js';
 import {laneIds,findNode,moveLane,placeLane,renameLane,removeLane,withoutLaneState} from './stream-tree.js';
 import {leadFor} from './scope.js';
-const KEYS=['repo.portrait.lanes','repo.portrait.views','repo.portrait.info','repo.portrait.browser'];
+const KEYS=['repo.portrait.lanes','repo.portrait.views','repo.portrait.info','repo.portrait.browser','repo.portrait.questions'];
 const name=c=>(c?.repo||'Repository')+' / '+(c?.stream||'Empty');
 export function receiveMove(packet){
  const ack='repo.portrait.move-result';

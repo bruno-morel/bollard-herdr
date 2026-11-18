@@ -96,7 +96,15 @@ reported failure. Read the panel details: a color alone is not a test verdict.
 | --- | --- |
 | Conversation | Focus the existing agent terminal. Chat and approvals remain with that agent. |
 | Questions | Show agents or workflows that need input. |
-| Open question | Open the relevant terminal so you can answer its actual prompt. |
+| Answer here | Show the originating agent’s interactive terminal inside Questions. Answer its exact prompt while the main conversation stays separate below. |
+| Back to questions (list icon beside Questions) | Return to the request list without stopping or restarting the child agent. |
+
+Child-agent attention alerts open Questions in the parent stream’s existing
+window when available. No extra stream or window is created. The pane includes
+blocked agents and unread child responses; the selected child stays visible
+while it continues working. Replies and permission choices go directly to that
+child’s terminal, never to the parent. This does not launch agents or spend model
+allowance on interpreting questions.
 
 Questions depend on reported agent/workflow state. An empty panel does not prove
 that every CLI has no pending approval. Check the conversation if an agent appears

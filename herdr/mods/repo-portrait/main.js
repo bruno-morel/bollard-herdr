@@ -20,7 +20,8 @@ import {
   laneIds,
   findNode,
   ensureConversation,
-  fillInfoColumn
+  fillInfoColumn,
+  bindQuestion
 } from './stream-tree.js';
 import {
   COMPLETE,
@@ -218,6 +219,15 @@ export default class Portrait extends View {
             const row=JSON.parse(decodeURIComponent(cmd.slice(15)));
             cx.spawn(async cx => { await focusAttention(row); cx.notify(); });
             continue;
+          }
+          if(cmd.startsWith('question-open:')){
+            const target=JSON.parse(decodeURIComponent(cmd.slice(14)));
+            if(relatives(laneConfig(target.lane)).some(r=>r.address===target.terminal)){
+              setShared('repo.portrait.questions',{...(shared('repo.portrait.questions')||{}),[target.lane]:target.terminal});
+              view(target.lane,'questions');
+              setShared('repo.portrait.focus-pending',{lane:target.lane,terminal:target.terminal,node:target.lane+'-questions'});
+            }else notify({title:'Question no longer available',body:'The agent is no longer live in this stream.',level:'info'});
+            cx.notify();continue;
           }
           if (cmd.startsWith('attention-focus:')) {
             const target=JSON.parse(decodeURIComponent(cmd.slice(16)));
@@ -418,7 +428,7 @@ export default class Portrait extends View {
     if(JSON.stringify(shared('repo.portrait.displayed'))!==JSON.stringify(displayed))
       setShared('repo.portrait.displayed',displayed);
     const pendingFocus=shared('repo.portrait.focus-pending');
-    if(pendingFocus && find(current,pendingFocus.lane+'-conversation')?.content?.terminal===pendingFocus.terminal){
+    if(pendingFocus && find(current,pendingFocus.node||pendingFocus.lane+'-conversation')?.content?.terminal===pendingFocus.terminal){
       setShared('repo.portrait.focus-pending',null);
       run('pane.focus',{terminal:pendingFocus.terminal});
     }
@@ -452,6 +462,9 @@ export default class Portrait extends View {
         this.error = 'Missing view: ' + lane + '-views';
         continue;
       }
+      const question=(shared('repo.portrait.questions')||{})[lane];
+      const questionLive=question && relatives(c).some(r=>r.address===question);
+      if(bindQuestion(copy,lane,questionLive?question:null))changed=true;
       if(fillInfoColumn(copy,lane))changed=true;
       const side = find(copy, lane + '-info');
       if (side && side.hidden !== !(shared(INFO) || {})[lane]) {
@@ -660,6 +673,7 @@ export default class Portrait extends View {
           tone: tone === 'ready' ? 'ready' : tone === 'error' ? 'error' : null
         }).w_full())
         .child(control('interaction-questions', 'Questions' + ((rows.some(r => agentState(r) === 'blocked') || flow?.state === 'needs-you') ? ' · needs you' : ''), () => {
+          setShared('repo.portrait.questions',{...(shared('repo.portrait.questions')||{}),[lane]:null});
           view(lane, 'questions');
           closeOverlay(p.overlay);
         }, {
@@ -823,6 +837,7 @@ export default class Portrait extends View {
         dropdown: true,
         tone
       }))
+      .when(picked==='questions' && !!(shared('repo.portrait.questions')||{})[lane],e=>e.child(control('question-back','Back to questions',()=>setShared('repo.portrait.questions',{...(shared('repo.portrait.questions')||{}),[lane]:null}),{icon:'rows',compact:true})))
       .child(control('view-docker', 'Docker', () => view(lane, picked === 'docker' ? null : 'docker'), {
         icon: 'docker',
         selected: picked === 'docker',
@@ -928,7 +943,7 @@ export default class Portrait extends View {
       run('layout.set', {
         layout: tree
       });
-      for (const key of [KEY, VIEWS, INFO, 'repo.portrait.browser']) {
+      for (const key of [KEY, VIEWS, INFO, 'repo.portrait.browser', 'repo.portrait.questions']) {
         setShared(key, withoutLaneState(shared(key), id));
       }
       setShared('repo.portrait.unsaved', withoutLaneState(shared('repo.portrait.unsaved'), id, true));

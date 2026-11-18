@@ -149,8 +149,10 @@ def agent_windows(source, context):
   state=load(home/'shared.json',{}) or {}
   for lane,c in state.get('repo.portrait.displayed',state.get('repo.portrait.lanes',{})).items():
    exact=c.get('terminal')==context.get('terminal')
-   # A parent's window cannot focus an undisplayed child terminal.
-   if exact:matches.append((0,home,lane,True))
+   parent=c.get('terminal')==context.get('parent') and bool(context.get('parent'))
+   # Child requests live in the parent's Questions tool, not a new stream.
+   if parent:matches.append((0,home,lane,False))
+   elif exact:matches.append((1,home,lane,True))
  return sorted(matches,key=lambda x:(x[0],str(x[1])))
 
 
@@ -199,7 +201,8 @@ def focus_agent(source,context):
   except sp.TimeoutExpired:continue
   # Let the destination's own manager update its shared tool selection too.
   payload=quote(json.dumps({'lane':lane,'terminal':terminal,'exact':exact}),safe='')
-  result=sp.run([executable,'do','repo-portrait.attention-focus:'+payload],env=env,capture_output=True,text=True,timeout=3)
+  command='repo-portrait.attention-focus:' if exact else 'repo-portrait.question-open:'
+  result=sp.run([executable,'do',command+payload],env=env,capture_output=True,text=True,timeout=3)
   if result.returncode:raise RuntimeError(result.stderr or result.stdout or 'Could not focus the agent.')
   activate_window(home)
   return {'found':True,'home':str(home),'terminal':terminal}

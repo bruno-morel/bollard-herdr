@@ -116,3 +116,19 @@ class Windows(unittest.TestCase):
             with patch.object(W,'list_windows',return_value=[{'home':d,'lanes':[{'id':'bottom'}]}]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0)):
                 with self.assertRaisesRegex(RuntimeError,'Destination changed'):
                     W.move_view(Path('/source'),'top',packet)
+
+    def test_child_attention_prefers_parent_questions_without_new_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d).resolve();child=root/'screens/w-child';child.mkdir(parents=True)
+            W.save(root/'shared.json',{'repo.portrait.displayed':{'top':{'terminal':'box/parent'}}})
+            W.save(child/'repo-window.json',{'origin':str(root)})
+            W.save(child/'shared.json',{'repo.portrait.displayed':{'top':{'terminal':'box/child'}}})
+            with patch.object(Path,'is_socket',return_value=True):
+                matches=W.agent_windows(root,{'terminal':'box/child','parent':'box/parent'})
+            self.assertEqual(matches[0][1],root)
+            self.assertFalse(matches[0][3])
+            with patch.object(W,'agent_windows',return_value=matches[:1]),patch.object(W.shutil,'which',return_value='/fake/herdr'),patch.object(W.sp,'run',return_value=SimpleNamespace(returncode=0)) as run,patch.object(W,'activate_window'),patch.object(W.sp,'Popen') as spawn:
+                result=W.focus_agent(root,{'terminal':'box/child','parent':'box/parent'})
+            self.assertTrue(result['found'])
+            self.assertIn('repo-portrait.question-open:',run.call_args.args[0][2])
+            spawn.assert_not_called()

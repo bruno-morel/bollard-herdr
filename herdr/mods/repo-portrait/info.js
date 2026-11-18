@@ -4,7 +4,7 @@ import {scopedAgents,agentTree,statusKind,memoryReading} from './agent-cards.js'
 import {showAccount} from './account-pane.js';
 import {View,div} from 'gpui-kit';
 import {v_flex,h_flex} from 'gpui-base';
-import {exec,theme,props,terminals,shared,run,settings,notify} from 'herdr';
+import {exec,theme,props,terminals,shared,setShared,run,settings,notify} from 'herdr';
 import {scopedLocation,leadFor,machineOf} from './scope.js';
 import {button,caption,INFO,info,toolColors} from './ui.js';
 import {quotaCard,meterCard,meter,stat,badge,level,palette,number,duration,count} from './metrics.js';
@@ -147,11 +147,19 @@ export default class Info extends View {
  }
 }
 export class Questions extends View {
- render(){const c=scopedLocation(),t=theme(),rows=relatives(c).filter(r=>state(r)==='blocked'),flow=(shared('repo.flow-status')||{})[c?.key];return v_flex().size_full().min_h(0).bg(toolColors().background).text_color(t.foreground).p(14).gap(10)
- .child(div().text_size(14).font_semibold().child('Questions · '+rows.length+' agent'+(rows.length===1?'':'s')+' awaiting input'))
- .child(caption('Questions and permissions stay in their originating conversation. Open one to answer; nothing is approved automatically.'))
- .child(v_flex().id('questions-list').flex_1().min_h(0).overflow_y_scrollbar().gap(8).children(rows.map(r=>h_flex().p(10).bg(t.background).rounded(6).gap(10).items_center().child(v_flex().flex_1().child(div().text_size(12).child(r.labels?.['repo-tools.role']||'Agent')).child(div().text_size(12).font_semibold().child(activity(r).kind)).child(caption(activity(r).message||r.title||'Open the conversation for the exact prompt')).child(caption(activity(r).timing))).child(button('question-'+r.address,'Open question',()=>run('terminal.peek',{terminal:r.address}),{icon:'question'}))))
- .when(!rows.length,e=>e.child(caption('No agent is currently reporting a blocked state.')))
- .when(flow?.state==='needs-you',e=>e.child(v_flex().p(10).bg(t.background).child(div().text_size(12).font_semibold().child('Workflow needs you')).child(caption(flow.message)))));
+ render(){
+  const c=scopedLocation(),t=theme(),lane=props()?.lane,selected=(shared('repo.portrait.questions')||{})[lane];
+  const all=relatives(c),waiting=all.filter(r=>state(r)==='blocked'||(r.parent&&state(r)==='done'&&Number(r.labels?.['herdr.seen']??-1)<Number(r.turn??0)));
+  const rows=all.filter(r=>waiting.includes(r)||r.address===selected),embedded=props()?.embedded;
+  let el=v_flex().size_full().min_h(0).bg(toolColors().background).text_color(t.foreground).p(10).gap(6)
+   .child(h_flex().gap(6).items_center().child(div().flex_1().text_size(12).font_semibold().child('Questions · '+waiting.length+' pending'))
+    .when(!!selected,e=>e.child(button('question-list','Back to questions',()=>setShared('repo.portrait.questions',{...(shared('repo.portrait.questions')||{}),[lane]:null}),{icon:'rows'}))))
+   .child(caption(embedded?'Answer directly below · main conversation stays separate.':'Choose a question to answer here. Permissions still require your explicit choice.'));
+  const list=v_flex().id('questions-list').flex_1().min_h(0).overflow_y_scrollbar().gap(5).children(rows.map(r=>h_flex().gap(8).items_center()
+   .child(v_flex().flex_1().child(div().text_size(12).child((r.name||r.title||r.labels?.['repo-tools.role']||'Agent')+' · '+(state(r)==='blocked'?activity(r).kind:state(r)==='done'?'Response ready':state(r)||'Unknown'))).when(!embedded,e=>e.child(caption(activity(r).message||r.title||'')).child(caption(activity(r).timing))))
+   .child(button('question-'+r.address,selected===r.address?'Selected':'Answer here',()=>run('repo-portrait.question-open:'+encodeURIComponent(JSON.stringify({lane,terminal:r.address}))),{icon:'question',selected:selected===r.address}))));
+  el=el.child(list).when(!rows.length,e=>e.child(caption(selected?'That agent is no longer live. Its saved conversation is preserved.':'No pending agent questions.')));
+  const flow=(shared('repo.flow-status')||{})[c?.key];
+  return el.when(!embedded&&flow?.state==='needs-you',e=>e.child(caption(flow.message)));
  }
 }

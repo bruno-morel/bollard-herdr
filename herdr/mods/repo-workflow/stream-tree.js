@@ -92,3 +92,11 @@ export function renameLane(node, old, id){
  function walk(n){if(n.id?.startsWith(old+'-'))n.id=id+n.id.slice(old.length);if(n.active?.startsWith(old+'-'))n.active=id+n.active.slice(old.length);if(n.content?.props?.lane===old)n.content.props.lane=id;for(const c of n.children||[])walk(c);}
  walk(copy);return copy;
 }
+
+// Embed the originating agent terminal in Questions, leaving the lead untouched.
+export function bindQuestion(tree,lane,terminal){
+ const node=findNode(tree,lane+'-questions');if(!node)return false;
+ const next={id:node.id,type:'block',content:terminal?{terminal}:{mod:'repo-portrait',props:{kind:'questions',lane}}};
+ if(JSON.stringify(node)===JSON.stringify(next))return false;
+ for(const key of Object.keys(node))delete node[key];Object.assign(node,next);return true;
+}
